@@ -36,6 +36,18 @@ geoqoe_pulse/
 
 ---
 
+## 💾 Raw Datasets & Google Drive Access
+
+All raw datasets used in this project are hosted on Google Drive for easy team access and reproducibility:
+
+👉 **[Google Drive Raw Datasets Folder](https://drive.google.com/drive/folders/1EG-etCo-w5oxZ3QlJQFvC-xa1H-_myGX?usp=sharing)**
+
+To download and run locally:
+1. Download all files from the [Google Drive Folder](https://drive.google.com/drive/folders/1EG-etCo-w5oxZ3QlJQFvC-xa1H-_myGX?usp=sharing).
+2. Place the raw files into `data/raw/` in your local project directory.
+
+---
+
 ## 🚀 Quick Setup & Installation
 
 ### Step 1: Clone Repository
