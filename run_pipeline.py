@@ -1,131 +1,224 @@
 """
-GeoQoE Pulse Master Execution Pipeline.
-Executes data preprocessing, H3 spatial feature engineering, saves intermediate checkpoints to data/processed/ and data/features/,
-and exports final modeling Parquet outputs to data/outputs/.
+GeoQoE Pulse Data & GIS Pipeline — Orchestrator.
+
+    Raw Data
+        v
+    H3 Study Grid (real boundary polygon, real geometry)
+        v
+    Real Spatial Joins (towers, buildings, Ookla, OSM, WorldPop, DOSM, ridership)
+        v
+    Temporal Feature Engineering (leakage-free lags/rolling stats)
+        v
+    Spatial Feature Engineering (real libpysal weights, spatial lags/variance)
+        v
+    Demand Pressure Index (real static features + historical QoE + nearby demand)
+        v
+    Hotspot Detection (real esda Getis-Ord Gi* + Local Moran's I)
+        v
+    QoE Target Generation
+        v
+    Validation
+        v
+    Export ML-ready datasets + grid geometry + metadata
+
+Exported files (unchanged filenames/schema-compatible with the modelling
+team's existing workflow, per the brief):
+    data/processed/grid_geometry.parquet / .geojson   
+    data/outputs/cell_time_dataset.parquet
+    data/outputs/cell_static_features.parquet
+    data/outputs/qoe_targets.parquet
+    data/outputs/feature_dictionary.xlsx
+    data/outputs/metadata.json
 """
-import sys
-from pathlib import Path
+import logging
+import time
 
-# Add src to sys.path
-BASE_DIR = Path(__file__).parent.resolve()
-sys.path.append(str(BASE_DIR))
-sys.path.append(str(BASE_DIR / "src"))
-
+import numpy as np
 import pandas as pd
-from config import OUTPUT_DIR, PROCESSED_DIR, FEATURES_DIR, H3_PRIMARY_RESOLUTION
-from src.data_preprocessing.data_downloader import generate_h3_study_grid, load_real_or_baseline_datasets
-from src.data_preprocessing.spatial_processor import build_h3_spatial_weights, compute_vectorized_spatial_lags, compute_getis_ord_hotspots
-from src.data_preprocessing.feature_engineer import compute_temporal_shifted_features, compute_demand_pressure_proxy
-from src.data_preprocessing.qoe_target import compute_composite_qoe_targets
 
-def run_master_pipeline():
-    print("=" * 70)
-    print("GeoQoE Pulse — Master Data Engineering & GIS Pipeline Execution")
-    print("=" * 70)
-    
-    # 1. Generate H3 Spatial Framework & Save Processed Grid Checkpoint
-    print("\n[Step 1/6] Building H3 Spatial Hexagon Grid (Resolution 8)...")
-    grid_df = generate_h3_study_grid(res=H3_PRIMARY_RESOLUTION)
-    print(f"-> Generated {len(grid_df)} H3 hexagonal cells for Klang Valley study area.")
-    
-    # Save intermediate processed grid checkpoint
-    grid_checkpoint = PROCESSED_DIR / "klang_valley_h3_grid_res8.parquet"
-    grid_df.to_parquet(grid_checkpoint, index=False)
-    print(f"-> Saved intermediate spatial grid checkpoint to: {grid_checkpoint.name}")
-    
-    # 2. Ingest Spatial Datasets & Dynamic QoE Observations
-    print("\n[Step 2/6] Ingesting Spatial Datasets & Dynamic QoE Observations...")
-    static_df, dynamic_df = load_real_or_baseline_datasets(grid_df, days=7)
-    print(f"-> Static features loaded: {len(static_df)} cells.")
-    print(f"-> Dynamic panel observations loaded: {len(dynamic_df)} rows ({dynamic_df['timestamp'].nunique()} hourly time steps).")
-    
-    # Save intermediate static feature checkpoint
-    static_checkpoint = FEATURES_DIR / "static_spatial_features.parquet"
-    static_df.to_parquet(static_checkpoint, index=False)
-    print(f"-> Saved static spatial features checkpoint to: {static_checkpoint.name}")
-    
-    # 3. Spatial Weights & Spatial Lag Feature Engineering
-    print("\n[Step 3/6] Building H3 Spatial Topology & Computing Spatial Lag Features (W @ y)...")
-    h3_list = grid_df["h3_index"].tolist()
-    W_sparse, h3_order = build_h3_spatial_weights(h3_list)
-    
-    panel = dynamic_df.merge(static_df, on="h3_index", how="left")
-    spatial_target_cols = ["dl_median", "rtt_median", "pop_count"]
-    panel = compute_vectorized_spatial_lags(panel, W_sparse, h3_order, spatial_target_cols)
-    print(f"-> Generated spatial lag features: {[f'spatial_lag_{c}' for c in spatial_target_cols]}")
-    
-    # 4. Temporal Features & Dynamic Demand Proxies
-    print("\n[Step 4/6] Computing Leakage-Free Temporal Lags & Dynamic Demand Pressure Proxies...")
-    panel = compute_temporal_shifted_features(panel, metrics=["dl_median", "rtt_median"])
-    panel = compute_demand_pressure_proxy(panel)
-    panel = compute_vectorized_spatial_lags(panel, W_sparse, h3_order, ["demand_pressure_index"])
-    
-    # Getis-Ord Gi* Hotspot Z-scores
-    gi_dfs = []
-    for ts, group in panel.groupby("timestamp"):
-        group_scored = compute_getis_ord_hotspots(group, W_sparse, col="rtt_median")
-        group_scored["timestamp"] = ts
-        gi_dfs.append(group_scored)
-    panel = pd.concat(gi_dfs, ignore_index=True)
-    
-    # Save intermediate feature matrix checkpoint
-    features_checkpoint = FEATURES_DIR / "engineered_panel_features.parquet"
-    panel.to_parquet(features_checkpoint, index=False)
-    print(f"-> Saved engineered panel features checkpoint to: {features_checkpoint.name}")
-    
-    # 5. QoE Composite Target Calculation
-    print("\n[Step 5/6] Formulating Composite ITU QoE Scores, MOS, and Categorical Degradation Targets...")
-    panel = compute_composite_qoe_targets(panel)
-    
-    # 6. Quality Control & Dataset Export
-    print("\n[Step 6/6] Executing Quality Control Audits & Exporting Model-Ready Datasets...")
-    feature_cols = [
-        "pop_count", "built_up_ratio", "poi_retail_food_count", "poi_office_count",
-        "poi_transport_stop_count", "road_length_primary_m", "dist_to_nearest_tower_m",
-        "hour_of_day", "day_of_week", "is_weekend", "is_peak_period", "demand_pressure_index",
-        "spatial_lag_dl_median", "spatial_lag_rtt_median", "spatial_lag_demand_pressure_index",
-        "lag_1h_dl_median", "lag_24h_dl_median", "rolling_mean_24h_dl_median", "rolling_std_24h_dl_median",
-        "getis_ord_gi_zscore_rtt_median", "qoe_confidence_score"
-    ]
-    
-    null_counts = panel[feature_cols].isnull().sum().sum()
-    print(f"-> Quality Assertion: Total null values across engineered ML features = {null_counts}")
-    assert null_counts == 0, "Error: Unexpected NaN values detected in final feature matrix!"
-    
-    # Export Final Outputs
-    output_parquet_path = OUTPUT_DIR / "cell_time_dataset.parquet"
-    static_parquet_path = OUTPUT_DIR / "cell_static_features.parquet"
-    targets_parquet_path = OUTPUT_DIR / "qoe_targets.parquet"
-    
-    panel.to_parquet(output_parquet_path, engine="pyarrow", compression="zstd", index=False)
-    static_df.to_parquet(static_parquet_path, engine="pyarrow", compression="zstd", index=False)
-    
-    target_cols = ["h3_index", "timestamp", "target_qoe_score", "target_mos", "target_is_degraded", "target_degradation_class"]
-    panel[target_cols].to_parquet(targets_parquet_path, engine="pyarrow", compression="zstd", index=False)
-    
-    # Generate Feature Dictionary Excel Table
-    dict_records = []
-    for col in panel.columns:
-        is_target = "target" in col
-        dict_records.append({
-            "Feature Name": col,
-            "Data Type": str(panel[col].dtype),
-            "Sample Value": str(panel[col].iloc[0]),
-            "Feature Category": "Target Variable" if is_target else ("Spatial/Demographic" if col in static_df.columns else "Dynamic/Lag"),
-            "Suitable for ML?": "No (Target)" if is_target else ("Key ID" if col in ["h3_index", "timestamp"] else "Yes")
-        })
-    dict_df = pd.DataFrame(dict_records)
-    dict_excel_path = OUTPUT_DIR / "feature_dictionary.xlsx"
-    dict_df.to_excel(dict_excel_path, index=False)
-    
-    print("\n" + "=" * 70)
-    print("SUCCESS: GeoQoE Pulse Master Pipeline Execution Complete!")
-    print(f"-> Saved master panel dataset to: {output_parquet_path}")
-    print(f"-> Saved static features to:      {static_parquet_path}")
-    print(f"-> Saved QoE target variables to: {targets_parquet_path}")
-    print(f"-> Saved Feature Dictionary to:   {dict_excel_path}")
-    print(f"-> Final Table Shape: {panel.shape[0]} rows x {panel.shape[1]} columns.")
-    print("=" * 70)
+from config import (
+    GLOBAL_RANDOM_SEED, PROCESSED_DIR, OUTPUT_DIR, BASE_DIR, H3_PRIMARY_RESOLUTION,
+)
+from src.data_preprocessing.geometry_utils import generate_h3_study_grid, export_grid_geometry
+from src.data_preprocessing.data_downloader import build_static_features, load_ookla, build_dynamic_panel
+from src.data_preprocessing.feature_engineer import (
+    compute_temporal_shifted_features, compute_demand_pressure_base,
+    apply_dynamic_demand_adjustments, finalize_demand_pressure_index,
+)
+from src.data_preprocessing.spatial_processor import (
+    build_h3_spatial_weights, compute_vectorized_spatial_lags, compute_spatial_rolling_mean,
+    compute_hotspots, compute_local_moran, compute_historical_hotspot_frequency,
+)
+from src.data_preprocessing.qoe_target import compute_composite_qoe_targets
+from src.data_preprocessing.data_validator import run_full_validation
+from src.data_preprocessing.metadata_utils import generate_metadata, summarize_synthetic_fraction
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("run_pipeline")
+
+NON_FEATURE_COLS = {
+    "h3_index", "timestamp", "row_id",
+    "target_qoe_score", "target_mos", "target_is_degraded", "target_degradation_class",
+    "dl_median", "dl_mean", "dl_std", "dl_p95", "ul_median", "ul_mean", "ul_std",
+    "rtt_median", "rtt_mean", "rtt_std", "jitter_median", "loss_median",
+}
+
+COLUMN_DESCRIPTIONS = {
+    "h3_index": "Uber H3 res-8 cell identifier (join key).",
+    "timestamp": "Hourly timestamp (UTC-naive, local Klang Valley convention).",
+    "row_id": "Surrogate unique row identifier (h3_index + timestamp composite, as int).",
+    "dl_median": "Median download throughput (Mbps) for this cell-hour.",
+    "rtt_median": "Median round-trip latency (ms) for this cell-hour.",
+    "qoe_is_synthetic": "True if this cell-hour's QoE values are model-generated rather than Ookla-anchored.",
+    "target_qoe_score": "Composite 0-100 QoE score (ITU-inspired).",
+    "target_mos": "Mean Opinion Score estimate (1.0-5.0).",
+    "target_is_degraded": "Binary degradation flag (dl below threshold OR rtt above threshold).",
+    "target_degradation_class": "0=normal, 1=degraded, 2=severe.",
+    "demand_pressure_index": "0-100 composite demand pressure (population, POI, built-up, roads, historical QoE, nearby demand).",
+    "population_night": "WorldPop-derived residential population estimate for the cell.",
+    "population_day": "Modelled daytime population (residential population reweighted by real OSM office/retail density).",
+    "built_up_ratio": "Real building footprint area / real H3 cell area (both from GIS geometry, not a hardcoded constant).",
+    "gi_star_zscore_rtt_median": "Getis-Ord Gi* z-score for latency (esda.G_Local, star=True).",
+    "hotspot_category_rtt_median": "Hot/cold spot classification at 90/95/99% confidence (esda.G_Local p-values).",
+    "local_moran_quadrant_rtt_median": "HH/LH/LL/HL spatial cluster/outlier classification (esda.Moran_Local).",
+    "historical_hotspot_freq_rtt_median": "Rolling (shift(1)-based, leakage-free) fraction of past hours this cell was a real hotspot.",
+}
+
+
+def _describe_column(col: str) -> str:
+    if col in COLUMN_DESCRIPTIONS:
+        return COLUMN_DESCRIPTIONS[col]
+    if col.endswith("_is_synthetic"):
+        return f"True if {col.replace('_is_synthetic', '')} used a synthetic fallback (raw source file missing)."
+    if col.startswith("lag_1h_"):
+        return f"Value of {col[7:]} exactly 1 hour prior (shift(1), leakage-free)."
+    if col.startswith("lag_24h_"):
+        return f"Value of {col[8:]} exactly 24 hours prior (shift(24), leakage-free)."
+    if col.startswith("spatial_lag_"):
+        return f"Row-standardized H3 1-ring neighbor average of {col[12:]} at the same timestamp."
+    if col.endswith("_valid"):
+        return "1 if the corresponding lag/rolling column is backed by real history, 0 during warm-up (NaN)."
+    return "See src/data_preprocessing/ module docstrings."
+
+
+def build_feature_dictionary(panel_df: pd.DataFrame, static_df: pd.DataFrame,
+                              targets_df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for name, df in (("cell_time_dataset", panel_df), ("cell_static_features", static_df), ("qoe_targets", targets_df)):
+        for col in df.columns:
+            rows.append({
+                "file": name,
+                "column": col,
+                "dtype": str(df[col].dtype),
+                "pct_non_null": round(100 * df[col].notna().mean(), 2),
+                "is_feature": col not in NON_FEATURE_COLS and not col.startswith("target_"),
+                "description": _describe_column(col),
+            })
+    return pd.DataFrame(rows)
+
+
+def main(days: int = 7):
+    t_start = time.time()
+    np.random.seed(GLOBAL_RANDOM_SEED)  # single global seed, set once, before ANY randomness
+    logger.info("=== GeoQoE Pulse Data & GIS Pipeline v2.0.0 ===")
+
+    # --- 1. Real H3 study grid -------------------------------------------------
+    logger.info("[1/9] Generating H3 study grid from real study boundary...")
+    grid_gdf = generate_h3_study_grid(res=H3_PRIMARY_RESOLUTION)
+    export_grid_geometry(grid_gdf, PROCESSED_DIR)
+
+    # --- 2. Real spatial joins ---------------------------------------------------
+    logger.info("[2/9] Real spatial joins: towers, buildings, OSM, WorldPop, DOSM...")
+    static_df = build_static_features(grid_gdf)
+
+    logger.info("[2b/9] Real Ookla spatial join (static per-cell baseline)...")
+    ookla_df = load_ookla(grid_gdf)
+
+    logger.info("[2c/9] Assembling hourly panel (%d days)...", days)
+    panel_df = build_dynamic_panel(grid_gdf, static_df, ookla_df, days=days)
+
+    # --- 3. Temporal feature engineering (leakage-free) --------------------------
+    logger.info("[3/9] Temporal features (leakage-free lags/rolling stats)...")
+    panel_df = compute_temporal_shifted_features(panel_df)
+
+    # Bring static features into the panel so per-timestamp spatial lags of
+    # e.g. population are possible, and so the exported panel is self-contained.
+    static_cols_for_panel = [c for c in static_df.columns if c != "h3_index"]
+    panel_df = panel_df.merge(static_df[["h3_index"] + static_cols_for_panel], on="h3_index", how="left")
+
+    # --- 4. Demand pressure index (real features, two-pass to fold in spatial term) ---
+    logger.info("[4/9] Demand pressure index (real static features + historical QoE)...")
+    demand_base_df = compute_demand_pressure_base(static_df)
+    panel_df = apply_dynamic_demand_adjustments(panel_df, demand_base_df)
+
+    # --- 5. Spatial weights + spatial features ------------------------------------
+    logger.info("[5/9] Building real libpysal spatial weights (H3 1-ring adjacency)...")
+    w, h3_order = build_h3_spatial_weights(grid_gdf["h3_index"])
+
+    logger.info("[5b/9] Spatial lags, spatial variance, spatial rolling mean...")
+    panel_df = compute_vectorized_spatial_lags(
+        panel_df, w, h3_order,
+        target_cols=["dl_median", "rtt_median", "population_night", "demand_pressure_index_pre_spatial"],
+    )
+    panel_df = finalize_demand_pressure_index(panel_df)
+    panel_df = compute_spatial_rolling_mean(panel_df, w, h3_order, col="dl_median", window=24)
+
+    # --- 6. Hotspot detection (real esda implementations) -------------------------
+    logger.info("[6/9] Getis-Ord Gi* + Local Moran's I (esda, real statistics with p-values)...")
+    panel_df = compute_hotspots(panel_df, w, h3_order, col="rtt_median", permutations=99)
+    panel_df = compute_local_moran(panel_df, w, h3_order, col="rtt_median", permutations=99)
+    panel_df = compute_historical_hotspot_frequency(panel_df, col="rtt_median", window=168)
+
+    # --- 7. QoE targets -------------------------------------------------------------
+    logger.info("[7/9] Composite QoE targets (score, MOS, degradation class)...")
+    panel_df = compute_composite_qoe_targets(panel_df)
+
+    panel_df = panel_df.sort_values(["h3_index", "timestamp"]).reset_index(drop=True)
+    panel_df.insert(0, "row_id", panel_df.index)
+
+    targets_df = panel_df[[
+        "row_id", "h3_index", "timestamp",
+        "target_qoe_score", "target_mos", "target_is_degraded", "target_degradation_class",
+        "qoe_confidence_score",
+    ]].copy()
+
+    # --- 8. Validation ----------------------------------------------------------------
+    logger.info("[8/9] Running automated data validation...")
+    report = run_full_validation(grid_gdf, static_df, panel_df, targets_df)
+    if report.warnings:
+        logger.warning("Validation passed with %d warning(s) — see log above for details.", len(report.warnings))
+
+    # --- 9. Export ----------------------------------------------------------------------
+    logger.info("[9/9] Exporting ML-ready datasets, feature dictionary, and metadata...")
+    panel_path = OUTPUT_DIR / "cell_time_dataset.parquet"
+    static_path = OUTPUT_DIR / "cell_static_features.parquet"
+    targets_path = OUTPUT_DIR / "qoe_targets.parquet"
+
+    panel_df.to_parquet(panel_path, index=False, compression="zstd")
+    static_df.to_parquet(static_path, index=False, compression="zstd")
+    targets_df.to_parquet(targets_path, index=False, compression="zstd")
+
+    feature_dict_df = build_feature_dictionary(panel_df, static_df, targets_df)
+    feature_dict_df.to_excel(OUTPUT_DIR / "feature_dictionary.xlsx", index=False)
+
+    synthetic_summary = summarize_synthetic_fraction(static_df, panel_df)
+    generate_metadata(
+        base_dir=BASE_DIR,
+        output_dir=OUTPUT_DIR,
+        feature_columns=[c for c in panel_df.columns if c not in NON_FEATURE_COLS and not c.startswith("target_")],
+        row_counts={"grid_cells": len(grid_gdf), "static_rows": len(static_df),
+                    "panel_rows": len(panel_df), "target_rows": len(targets_df)},
+        synthetic_summary=synthetic_summary,
+    )
+
+    elapsed = time.time() - t_start
+    logger.info(
+        "=== Pipeline complete in %.1fs — %d cells x %d hours = %d panel rows. "
+        "Synthetic-fallback fractions: %s ===",
+        elapsed, len(grid_gdf), len(panel_df) // len(grid_gdf), len(panel_df), synthetic_summary,
+    )
+    return grid_gdf, static_df, panel_df, targets_df
+
 
 if __name__ == "__main__":
-    run_master_pipeline()
+    main()

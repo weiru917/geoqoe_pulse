@@ -34,15 +34,14 @@ def compute_composite_qoe_targets(df):
         (rtt > t["rtt_degraded_ms"])
     ).astype(int)
     
-    def classify_severity(row):
-        if row["dl_median"] < 5.0 or row["rtt_median"] > 150.0:
-            return 2
-        elif row["dl_median"] < 15.0 or row["rtt_median"] > 80.0:
-            return 1
-        else:
-            return 0
-
-    severity_class = df.apply(classify_severity, axis=1)
+    severity_class = pd.Series(
+        np.select(
+            [(dl < 5.0) | (rtt > 150.0), (dl < 15.0) | (rtt > 80.0)],
+            [2, 1],
+            default=0,
+        ),
+        index=df.index,
+    )
     
     sample_counts = df["test_sample_count"] if "test_sample_count" in df.columns else pd.Series(10, index=df.index)
     confidence_score = np.minimum(1.0, sample_counts / 10.0)
