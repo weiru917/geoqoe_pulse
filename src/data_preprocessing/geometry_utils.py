@@ -21,6 +21,7 @@ from config import (
     STUDY_BOUNDARY_PATH,
     STUDY_BBOX,
     H3_PRIMARY_RESOLUTION,
+    KLANG_VALLEY_DISTRICT_NAMES,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,35 @@ def load_study_boundary() -> gpd.GeoDataFrame:
             boundary = boundary.set_crs(CRS_WGS84)
         else:
             boundary = boundary.to_crs(CRS_WGS84)
-        logger.info("Loaded real study boundary polygon from %s", STUDY_BOUNDARY_PATH.name)
+
+        # Defensive scope filter: study_boundary.geojson has already been
+        # trimmed to Klang Valley core districts (see
+        # scripts/trim_boundary.py), but if this file is ever regenerated
+        # from a raw, unfiltered "NAME_1 == Selangor" GADM extract, this
+        # filter stops out-of-scope districts (e.g. Hulu Selangor, Sabak
+        # Bernam — rural/exurban, never part of any Klang Valley definition)
+        # from silently re-entering the pipeline. Matches on NAME_2 (falls
+        # back to NAME_1 for Putrajaya, which has no NAME_2).
+        name_col = "NAME_2" if "NAME_2" in boundary.columns else None
+        if name_col:
+            name_1 = boundary["NAME_1"] if "NAME_1" in boundary.columns else pd.Series("", index=boundary.index)
+            in_scope = boundary[name_col].isin(KLANG_VALLEY_DISTRICT_NAMES) | name_1.isin(KLANG_VALLEY_DISTRICT_NAMES)
+            n_dropped = (~in_scope).sum()
+            if n_dropped:
+                dropped_names = boundary.loc[~in_scope, name_col].tolist()
+                logger.warning(
+                    "Study boundary scope filter dropped %d out-of-scope district(s) not in "
+                    "KLANG_VALLEY_DISTRICT_NAMES: %s. If this fires on a file that was already "
+                    "supposed to be pre-trimmed, check data/boundary/study_boundary.geojson.",
+                    n_dropped, dropped_names,
+                )
+            boundary = boundary.loc[in_scope].copy()
+
+        logger.info(
+            "Loaded real study boundary polygon from %s (%d feature(s), scope: Klang Valley core; "
+            "Kuala Lumpur federal territory NOT included — no KL boundary file available).",
+            STUDY_BOUNDARY_PATH.name, len(boundary),
+        )
         return boundary
 
     logger.warning(

@@ -137,11 +137,48 @@ def validate_targets(targets_df: pd.DataFrame, report: ValidationReport) -> None
             "should use class weighting / PR-AUC, not plain accuracy.", 100 * rate,
         ) if rate < 0.02 or rate > 0.5 else None
 
-    for col in ("target_qoe_score",):
+    for col in ("target_qoe_index",):
         if col in targets_df.columns:
             out_of_range = ~targets_df[col].between(0, 100)
             if out_of_range.any():
                 report.error("%d row(s) with %s outside [0, 100].", out_of_range.sum(), col)
+
+    # Regression guard for the weight-sum bug: with correctly-summing
+    # QOE_INDEX_WEIGHTS, at least some rows with excellent dl/ul/rtt should
+    # be able to approach the top of the range. If the observed maximum is
+    # suspiciously far below 100, the weights have silently drifted again.
+    if "target_qoe_index" in targets_df.columns and len(targets_df):
+        observed_max = targets_df["target_qoe_index"].max()
+        if observed_max < 90.0:
+            report.warn(
+                "target_qoe_index's observed maximum is only %.1f (expected values approaching 100 to "
+                "be reachable) — check that config.QOE_INDEX_WEIGHTS['download'] + ['upload'] still sum "
+                "to 1.0; a value well below 100 here previously indicated a silent weight-sum bug.",
+                observed_max,
+            )
+
+    # Regression guard for the is_degraded / degradation_class inconsistency
+    # bug: both are now derived from the same thresholds by construction, so
+    # this should always pass — kept as a hard error specifically because a
+    # future edit to qoe_target.py re-introducing separate thresholds is the
+    # most likely way this regresses silently.
+    if {"target_is_degraded", "target_degradation_class"} <= set(targets_df.columns):
+        mismatch = (targets_df["target_is_degraded"] == 1) != (targets_df["target_degradation_class"] >= 1)
+        if mismatch.any():
+            report.error(
+                "%d row(s) where target_is_degraded disagrees with target_degradation_class — these "
+                "must be derived from the same threshold source (see qoe_target.compute_qoe_targets).",
+                mismatch.sum(),
+            )
+
+    next_hour_valid_cols = [c for c in targets_df.columns if c.endswith("_valid") and c.startswith("target_next_")]
+    for col in next_hour_valid_cols:
+        invalid_frac = 1.0 - targets_df[col].mean()
+        report.warn(
+            "%.3f%% of rows have %s == 0 (end-of-series warm-up, no future observation) — these must be "
+            "dropped before training on the corresponding next-hour target, not treated as label 0.",
+            100 * invalid_frac, col,
+        )
 
 
 def run_full_validation(grid_gdf, static_df, panel_df, targets_df=None) -> ValidationReport:

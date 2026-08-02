@@ -12,7 +12,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from config import DEMAND_WEIGHTS, LAG_WARMUP_HOURS
+from config import DEMAND_WEIGHTS, LAG_WARMUP_HOURS, HIGH_LEAKAGE_RISK_FEATURES
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,23 @@ def apply_dynamic_demand_adjustments(panel_df: pd.DataFrame, demand_base_df: pd.
     `finalize_demand_pressure_index` AFTER spatial_processor computes the
     spatial lag of `demand_pressure_index_pre_spatial` — this function alone
     cannot see neighbor values.
+
+    LEAKAGE-RISK CAVEAT (see config.HIGH_LEAKAGE_RISK_FEATURES): while the
+    hourly panel's rtt_median is a SIMULATED value generated from
+    population/POI (data_downloader.build_dynamic_panel), the
+    historical_qoe component below is mechanically correlated with the same
+    population/POI inputs that already drive demand_pressure_base — a
+    circular path, not an independently discovered relationship. This is
+    harmless once real (non-simulated) QoE data replaces the panel, but
+    until then, prefer `demand_pressure_base` (returned by
+    compute_demand_pressure_base, real inputs only) over the full
+    `demand_pressure_index` for anything presented as a validated finding.
     """
+    logger.warning(
+        "demand_pressure_index's historical_qoe component is circular with the SIMULATED QoE panel — "
+        "%s Use demand_pressure_base for a non-circular real-data-only feature.",
+        HIGH_LEAKAGE_RISK_FEATURES.get("demand_pressure_index", ""),
+    )
     panel_df = panel_df.merge(demand_base_df, on="h3_index", how="left")
     w = DEMAND_WEIGHTS
 

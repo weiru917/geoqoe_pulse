@@ -125,9 +125,11 @@ def load_towers(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
         return pd.DataFrame({
             "h3_index": grid_gdf["h3_index"],
             "tower_count": count,
+            "opencellid_record_count": count,
             "tower_density_per_km2": count / area_km2.values,
             "dist_to_nearest_tower_m": _synthetic_seeded_fallback(n, 80, 1200),
             "tower_is_synthetic": True,
+            "tower_source": "synthetic_fallback_no_file",
         })
 
     # OpenCellID schema (no header): radio,mcc,net,area,cell,unit,lon,lat,range,samples,...
@@ -136,13 +138,31 @@ def load_towers(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
         raw["lat"].between(STUDY_BBOX["min_lat"] - 0.1, STUDY_BBOX["max_lat"] + 0.1)
         & raw["lon"].between(STUDY_BBOX["min_lon"] - 0.1, STUDY_BBOX["max_lon"] + 0.1)
     ]
-    points = gpd.GeoDataFrame(raw, geometry=gpd.points_from_xy(raw["lon"], raw["lat"]), crs=CRS_WGS84)
+    n_records = len(raw)
 
-    counts = spatial_join_point_agg(points, grid_gdf).rename(columns={"point_count": "tower_count"})
+    # OpenCellID has one row per (radio, operator, cell/sector) record — the
+    # same physical mast commonly appears many times over (multiple sectors,
+    # multiple technologies, multiple operators sharing a site). Counting raw
+    # records as "towers" overcounts physical infrastructure. Approximate
+    # physical sites by rounding coordinates to ~11m (5 decimal places) and
+    # deduplicating: records from the same mast normally share the mast's
+    # GPS fix to survey precision, so this collapses co-located sector/tech
+    # records onto one site while leaving genuinely separate masts distinct.
+    raw["_site_key"] = raw["lon"].round(5).astype(str) + "_" + raw["lat"].round(5).astype(str)
+    site_points = raw.drop_duplicates(subset="_site_key")[["lon", "lat"]].reset_index(drop=True)
+    n_sites = len(site_points)
+
+    record_points = gpd.GeoDataFrame(raw, geometry=gpd.points_from_xy(raw["lon"], raw["lat"]), crs=CRS_WGS84)
+    site_gdf = gpd.GeoDataFrame(site_points, geometry=gpd.points_from_xy(site_points["lon"], site_points["lat"]), crs=CRS_WGS84)
+
+    record_counts = spatial_join_point_agg(record_points, grid_gdf).rename(columns={"point_count": "opencellid_record_count"})
+    site_counts = spatial_join_point_agg(site_gdf, grid_gdf).rename(columns={"point_count": "tower_count"})
+
     result = grid_gdf[["h3_index", "area_m2", "geometry", "centroid_lat", "centroid_lon"]].merge(
-        counts, on="h3_index", how="left"
-    )
+        site_counts, on="h3_index", how="left"
+    ).merge(record_counts, on="h3_index", how="left")
     result["tower_count"] = result["tower_count"].fillna(0).astype(int)
+    result["opencellid_record_count"] = result["opencellid_record_count"].fillna(0).astype(int)
     result["tower_density_per_km2"] = result["tower_count"] / (result["area_m2"] / 1e6)
 
     cell_centroids = gpd.GeoDataFrame(
@@ -150,11 +170,21 @@ def load_towers(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
         geometry=gpd.points_from_xy(result["centroid_lon"], result["centroid_lat"]),
         crs=CRS_WGS84,
     )
-    result["dist_to_nearest_tower_m"] = nearest_distance_m(cell_centroids, points)
+    # Nearest distance uses deduplicated sites, not raw records — otherwise a
+    # single mast with many co-located records could distort local minima.
+    result["dist_to_nearest_tower_m"] = nearest_distance_m(cell_centroids, site_gdf)
     result["tower_is_synthetic"] = False
+    result["tower_source"] = "opencellid_deduplicated"
 
-    logger.info("Towers: %d real cell towers spatially joined into %d cells.", len(points), n)
-    return result[["h3_index", "tower_count", "tower_density_per_km2", "dist_to_nearest_tower_m", "tower_is_synthetic"]]
+    logger.info(
+        "Towers: %d raw OpenCellID records collapsed into %d approximate physical sites "
+        "(dedup ratio %.2f) and spatially joined into %d cells.",
+        n_records, n_sites, n_sites / max(n_records, 1), n,
+    )
+    return result[[
+        "h3_index", "tower_count", "opencellid_record_count", "tower_density_per_km2",
+        "dist_to_nearest_tower_m", "tower_is_synthetic", "tower_source",
+    ]]
 
 
 # --------------------------------------------------------------------------
@@ -544,11 +574,25 @@ def build_static_features(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
 def build_dynamic_panel(grid_gdf: gpd.GeoDataFrame, static_df: pd.DataFrame,
                          ookla_df: pd.DataFrame, days: int = 7) -> pd.DataFrame:
     """
-    Assemble the hourly cell x time panel. Where a real Ookla baseline
-    exists for a cell (see load_ookla docstring for the static-baseline +
-    modelled-diurnal-shape assumption), every hourly value for that cell is
-    generated AROUND the real measured baseline rather than from an
-    unconstrained synthetic formula.
+    Assemble the hourly cell x time SIMULATION panel.
+
+    IMPORTANT — read before using this table for anything but a pipeline /
+    dashboard demo: no per-hour QoE measurement source exists for this
+    project (no organiser data, and Ookla is a single static quarterly
+    average per cell). EVERY hourly dl/ul/rtt/jitter/loss value below is
+    generated by a diurnal-demand formula — for cells with a real Ookla
+    anchor, the formula's *level* is re-centred on that one real number;
+    for cells without one, the level is also formula-derived. In neither
+    case is the *hourly shape* a measurement. Two columns make this
+    unambiguous rather than leaving it in one easily-misread flag:
+
+      qoe_level_is_ookla_anchored : True for the ~41% of cells where a real
+          Ookla quarterly average existed to re-centre the formula on.
+      qoe_hourly_shape_is_simulated : always True. Included explicitly so
+          nobody downstream infers "anchored == real hourly measurement".
+
+    If your goal is a defensible, non-simulated modelling dataset, use
+    build_static_qoe_baseline() instead — it never fabricates a value.
     """
     timestamps = pd.date_range(start="2026-07-20 00:00:00", periods=24 * days, freq="1h")
     dates = pd.Series([pd.Timestamp(ts.date()) for ts in timestamps])
@@ -601,10 +645,48 @@ def build_dynamic_panel(grid_gdf: gpd.GeoDataFrame, static_df: pd.DataFrame,
                 "rtt_median": base_rtt, "rtt_mean": base_rtt * 1.05, "rtt_std": base_rtt * 0.2,
                 "jitter_median": jitter, "loss_median": loss_pct,
                 "test_sample_count": sample_count, "unique_device_count": max(1, int(sample_count * 0.7)),
-                "qoe_is_synthetic": not has_real_qoe,
+                "qoe_level_is_ookla_anchored": has_real_qoe,
+                "qoe_hourly_shape_is_simulated": True,
             })
 
     return pd.DataFrame(records)
+
+
+def build_static_qoe_baseline(static_df: pd.DataFrame, ookla_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    The honest, non-simulated, modelling-ready alternative to the hourly
+    panel. One row per H3 cell. No fabricated values anywhere:
+
+      - ookla_dl_mbps / ookla_rtt_ms / ookla_tests are the REAL Ookla
+        quarterly averages, left as NaN (not imputed, not guessed) for the
+        ~59% of cells with no tile coverage.
+      - Every predictor is a real static GIS feature already computed in
+        build_static_features() (population, POIs, buildings, roads,
+        towers) — none of them depend on QoE, so there is no circularity
+        of the kind documented in config.HIGH_LEAKAGE_RISK_FEATURES.
+
+    Recommended use ("Path B" from the review): train/validate a model on
+    the ~41% of cells with a real Ookla label to predict which of the
+    remaining ~59% of (real-feature-only) cells are likely to have poor
+    average mobile QoE. This is a smaller, less flashy claim than "predicts
+    hourly congestion", but every number behind it is real, which the
+    hourly panel cannot currently claim.
+    """
+    df = static_df.merge(ookla_df[["h3_index", "ookla_dl_mbps", "ookla_rtt_ms", "ookla_tests"]],
+                          on="h3_index", how="left")
+    df["has_real_ookla_label"] = df["ookla_dl_mbps"].notna()
+    df["qoe_risk_label"] = np.select(
+        [df["ookla_dl_mbps"] < 10.0, df["ookla_dl_mbps"] < 25.0],
+        ["high_risk", "moderate_risk"],
+        default="low_risk",
+    )
+    df.loc[~df["has_real_ookla_label"], "qoe_risk_label"] = None  # honest: unknown, not guessed
+    logger.info(
+        "Static QoE baseline: %d/%d cells have a real Ookla label; the remaining cells are "
+        "prediction targets (real features, unknown QoE) rather than training rows.",
+        int(df["has_real_ookla_label"].sum()), len(df),
+    )
+    return df
 
 
 def load_real_or_baseline_datasets(grid_gdf: gpd.GeoDataFrame, days: int = 7):
