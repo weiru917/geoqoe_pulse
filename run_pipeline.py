@@ -93,6 +93,30 @@ RAW_QOE_OBSERVATION_COLS = {
 # explicitly here because they were the review's leakage finding.
 SAME_HOUR_QOE_DERIVED_COLS = {"spatial_lag_dl_median", "spatial_lag_rtt_median"}
 
+# Ordinal encodings for categorical string columns that would otherwise
+# crash tree-based learners (XGBoost, LightGBM) at fit time. The string
+# originals are kept in the exported panel for dashboard human-readable
+# labels; the _encoded integer versions are what the ML feature lists
+# include. Ordering is deliberately semantic (cold → not_significant → hot;
+# LL → LH → HL → HH) so ordinal encoding preserves meaningful ordering.
+CATEGORICAL_ENCODINGS = {
+    "hotspot_category_rtt_median": {
+        "cold_99": 0, "cold_95": 1, "cold_90": 2, "not_significant": 3,
+        "hot_90": 4, "hot_95": 5, "hot_99": 6,
+    },
+    "local_moran_quadrant_rtt_median": {
+        "not_significant": 0, "LL": 1, "LH": 2, "HL": 3, "HH": 4,
+    },
+}
+# Raw string columns excluded from ML features — use the _encoded versions.
+STRING_CATEGORICAL_COLS = set(CATEGORICAL_ENCODINGS.keys())
+
+# Priority-score components are post-processing for the dashboard / ranking
+# pipeline, not independent predictors — including them would just add
+# multicollinearity with their real-feature inputs (population_day,
+# historical_hotspot_freq, qoe_confidence_score).
+PRIORITY_SCORE_COLS = {"priority_exposure_score", "priority_base_score"}
+
 
 def _target_cols(df: pd.DataFrame) -> set:
     return {c for c in df.columns if c.startswith("target_")}
@@ -115,7 +139,7 @@ def get_feature_columns(df: pd.DataFrame, target_mode: str) -> list:
     if target_mode not in ("current", "next_hour"):
         raise ValueError('target_mode must be "current" or "next_hour"')
 
-    exclude = set(STRUCTURAL_COLS) | set(CONSTANT_COLS) | _target_cols(df)
+    exclude = set(STRUCTURAL_COLS) | set(CONSTANT_COLS) | _target_cols(df) | STRING_CATEGORICAL_COLS | PRIORITY_SCORE_COLS
     if target_mode == "current":
         exclude |= RAW_QOE_OBSERVATION_COLS | SAME_HOUR_QOE_DERIVED_COLS
 
@@ -138,8 +162,12 @@ COLUMN_DESCRIPTIONS = {
     "rtt_std": "rtt_median x 0.20 (formula-derived).",
     "jitter_median": "Simulated jitter (ms), derived from rtt_median plus noise.",
     "loss_median": "Simulated packet loss percentage, derived from the same load_factor as dl/rtt.",
-    "test_sample_count": "Real Ookla test count where a real anchor exists for the cell; Poisson-simulated otherwise. Represents measurement VOLUME, not the outcome — safe as a feature in either target mode.",
+    "test_sample_count": "Simulated HOURLY-equivalent test count. For Ookla-anchored cells this is Poisson-sampled around an hourly rate derived from the REAL quarterly total (ookla_quarter_test_count / ~2160 hours, scaled by demand), NOT the quarterly total itself repeated per hour (that was a bug — see CHANGELOG). Represents measurement VOLUME, not the outcome — safe as a feature in either target mode.",
     "unique_device_count": "~70% of test_sample_count (rounded). Same status as test_sample_count.",
+    "ookla_quarter_test_count": "REAL Ookla quarterly test count for this cell (constant across all 168 simulated hours by definition — it is a QUARTERLY total, never a per-hour figure). NaN if the cell has no Ookla tile coverage.",
+    "ookla_quarter_device_count": "REAL Ookla quarterly unique-device count for this cell (constant across all 168 simulated hours; quarterly, not hourly). NaN if unavailable in the source tile or no coverage exists.",
+    "qoe_baseline_source": "Human-readable provenance string: 'ookla_q4_2024_static_anchor' or 'no_real_anchor_simulated_only'. Complements the qoe_level_is_ookla_anchored boolean.",
+    "ridership_daily_surge_factor": "Real daily ridership-derived demand multiplier (normalized to the selected week's mean), summed only over Klang-Valley-relevant transit modes (national/inter-city services like ETS, Intercity, Komuter Utara, and Tebrau are excluded). Previously folded silently into the hourly formula with no standalone column; now exported directly so it can be inspected or used as its own feature.",
     "qoe_level_is_ookla_anchored": "True if a real Ookla quarterly average existed to re-centre this cell's simulated hourly values on (~41% of cells). False does not mean 'less real' shape — the hourly SHAPE is simulated either way.",
     "qoe_hourly_shape_is_simulated": "Always True. Included explicitly so this fact cannot be missed or confused with the anchored/unanchored distinction above. Excluded from ML features (constant, zero information).",
     "target_qoe_index": "Custom composite 0-100 QoE index (log-utility download/upload minus exponential latency/loss penalty). NOT a validated ITU-T G.107 MOS — see qoe_target.py docstring.",
@@ -187,6 +215,10 @@ COLUMN_DESCRIPTIONS = {
     "hotspot_category_rtt_median": "Hot/cold spot classification at 90/95/99% confidence, from real esda.G_Local p-values.",
     "local_moran_quadrant_rtt_median": "HH/LH/LL/HL spatial cluster/outlier classification (real esda.Moran_Local).",
     "historical_hotspot_freq_rtt_median": "Rolling (shift(1)-based, leakage-free) fraction of past hours this cell was a real (esda-confirmed) hotspot.",
+    "hotspot_category_rtt_median_encoded": "Ordinal-encoded hotspot confidence band (0=cold_99, 1=cold_95, 2=cold_90, 3=not_significant, 4=hot_90, 5=hot_95, 6=hot_99). ML-compatible integer version of hotspot_category_rtt_median (string, kept for dashboard).",
+    "local_moran_quadrant_rtt_median_encoded": "Ordinal-encoded Local Moran's I spatial cluster/outlier class (0=not_significant, 1=LL, 2=LH, 3=HL, 4=HH). ML-compatible integer version of local_moran_quadrant_rtt_median (string, kept for dashboard).",
+    "priority_exposure_score": "MinMax-scaled population_day floored at 0.01 — the population-exposure component of the Priority Score. Not an ML feature (derived from population_day).",
+    "priority_base_score": "priority_exposure_score × historical_hotspot_freq × max(0.1, qoe_confidence_score) — pre-computed Priority Score base without model risk probability. Dashboard: final_priority = model_predicted_risk × priority_base_score. Not an ML feature.",
 }
 
 
@@ -283,6 +315,7 @@ def main(days: int = 7):
     logger.info("[4/10] Demand pressure index (real static features + flagged historical-QoE term)...")
     demand_base_df = compute_demand_pressure_base(static_df)
     panel_df = apply_dynamic_demand_adjustments(panel_df, demand_base_df)
+    static_df = static_df.merge(demand_base_df, on="h3_index", how="left")  # also export in static features
 
     # --- 5. Spatial weights + spatial features ------------------------------------
     logger.info("[5/10] Building real libpysal spatial weights (H3 1-ring adjacency)...")
@@ -302,10 +335,29 @@ def main(days: int = 7):
     panel_df = compute_local_moran(panel_df, w, h3_order, col="rtt_median", permutations=99)
     panel_df = compute_historical_hotspot_frequency(panel_df, col="rtt_median", window=168)
 
+    # --- 6b. Encode categorical string columns for ML compatibility -----------
+    logger.info("[6b/10] Encoding categorical columns (ordinal integers for ML, strings kept for dashboard)...")
+    for _cat_col, _cat_mapping in CATEGORICAL_ENCODINGS.items():
+        if _cat_col in panel_df.columns:
+            panel_df[f"{_cat_col}_encoded"] = panel_df[_cat_col].map(_cat_mapping).fillna(3).astype(int)
+
     # --- 7. QoE targets: same-hour AND next-hour forecast ---------------------------
     logger.info("[7/10] QoE targets (unified thresholds; same-hour + %dh-ahead forecast)...", FORECAST_HORIZON_HOURS)
     panel_df = compute_qoe_targets(panel_df)
     panel_df = compute_next_hour_targets(panel_df, horizon_hours=FORECAST_HORIZON_HOURS)
+
+    # --- 7b. Pre-compute priority score components ----------------------------
+    logger.info("[7b/10] Pre-computing priority score components (exposure × recurrence × confidence)...")
+    _pop = panel_df["population_day"].copy()
+    _pmin, _pmax = _pop.min(), _pop.max()
+    panel_df["priority_exposure_score"] = np.clip(
+        (_pop - _pmin) / max(_pmax - _pmin, 1e-9), 0.01, 1.0
+    )
+    panel_df["priority_base_score"] = (
+        panel_df["priority_exposure_score"]
+        * panel_df["historical_hotspot_freq_rtt_median"].fillna(0.0)
+        * panel_df["qoe_confidence_score"].clip(lower=0.1)
+    )
 
     panel_df = panel_df.sort_values(["h3_index", "timestamp"]).reset_index(drop=True)
     panel_df.insert(0, "row_id", panel_df.index)

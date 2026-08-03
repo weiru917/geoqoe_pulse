@@ -24,6 +24,36 @@ from src.data_preprocessing.geometry_utils import h3_ids_to_geodataframe
 logger = logging.getLogger(__name__)
 
 
+def extraction_bounds(grid_gdf: gpd.GeoDataFrame, buffer_deg: float = 0.05) -> tuple:
+    """
+    Real raw-file pre-filter bounds, derived from the ACTUAL study grid
+    (grid_gdf.total_bounds) rather than the stale, much smaller hardcoded
+    config.STUDY_BBOX.
+
+    Bug fixed here: load_towers/load_buildings/load_osm previously filtered
+    raw records against config.STUDY_BBOX, which at the time was set to
+    lon 101.50-101.80, lat 3.00-3.30 (a 0.3 deg x 0.3 deg box) while the
+    real, trimmed study boundary spans lon 101.20-101.97, lat 2.59-3.40 —
+    nearly 3x wider/taller. Every raw record outside that small box was
+    silently dropped before the spatial join ever ran, so most H3 cells
+    outside the small box received ZERO real building/tower/OSM records
+    while still being flagged `<feature>_is_synthetic = False` — "zero"
+    meant "outside the extraction window," not "confirmed no
+    infrastructure." STUDY_BBOX has also since been widened to match the
+    real boundary's extent (it now only serves as an emergency
+    grid-generation fallback if the boundary file itself is missing — see
+    geometry_utils.load_study_boundary), but extraction no longer reads it
+    at all; every loader below derives its own bounds from grid_gdf.
+
+    buffer_deg=0.05 (~5.5km) gives raw points just outside the grid's exact
+    polygon edge (e.g. a tower a few hundred metres past the boundary that
+    should still count via sjoin_nearest / distance calculations) room to
+    be read in, without re-introducing a mismatch with the real boundary.
+    """
+    min_lon, min_lat, max_lon, max_lat = grid_gdf.total_bounds
+    return (min_lon - buffer_deg, min_lat - buffer_deg, max_lon + buffer_deg, max_lat + buffer_deg)
+
+
 # --------------------------------------------------------------------------
 # Generic, reusable spatial-join helpers (GeoPandas, no row-wise .apply)
 # --------------------------------------------------------------------------
@@ -133,11 +163,9 @@ def load_towers(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
         })
 
     # OpenCellID schema (no header): radio,mcc,net,area,cell,unit,lon,lat,range,samples,...
+    min_lon, min_lat, max_lon, max_lat = extraction_bounds(grid_gdf)
     raw = pd.read_csv(path, header=None, usecols=[6, 7], names=["lon", "lat"])
-    raw = raw[
-        raw["lat"].between(STUDY_BBOX["min_lat"] - 0.1, STUDY_BBOX["max_lat"] + 0.1)
-        & raw["lon"].between(STUDY_BBOX["min_lon"] - 0.1, STUDY_BBOX["max_lon"] + 0.1)
-    ]
+    raw = raw[raw["lat"].between(min_lat, max_lat) & raw["lon"].between(min_lon, max_lon)]
     n_records = len(raw)
 
     # OpenCellID has one row per (radio, operator, cell/sector) record — the
@@ -215,12 +243,13 @@ def load_buildings(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
             "building_is_synthetic": True,
         })
 
+    min_lon, min_lat, max_lon, max_lat = extraction_bounds(grid_gdf)
     chunks = []
     for chunk in pd.read_csv(path, chunksize=200_000):
         filtered = chunk[
             (chunk["confidence"] >= 0.65)
-            & chunk["latitude"].between(STUDY_BBOX["min_lat"] - 0.1, STUDY_BBOX["max_lat"] + 0.1)
-            & chunk["longitude"].between(STUDY_BBOX["min_lon"] - 0.1, STUDY_BBOX["max_lon"] + 0.1)
+            & chunk["latitude"].between(min_lat, max_lat)
+            & chunk["longitude"].between(min_lon, max_lon)
         ]
         if not filtered.empty:
             chunks.append(filtered[["latitude", "longitude", "area_in_meters"]])
@@ -272,6 +301,7 @@ def load_ookla(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
             "ookla_dl_mbps": np.nan,
             "ookla_rtt_ms": np.nan,
             "ookla_tests": 0,
+            "ookla_devices": np.nan,
             "ookla_is_synthetic": True,
         })
 
@@ -299,17 +329,24 @@ def load_ookla(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
     # same as a 200-test tile).
     joined["dl_x_tests"] = joined["dl_mbps"] * joined["tests"]
     joined["rtt_x_tests"] = joined["rtt_ms"] * joined["tests"]
-    grouped = joined.groupby("h3_index").agg(
+    has_devices = "devices" in joined.columns
+    agg_kwargs = dict(
         dl_x_tests=("dl_x_tests", "sum"),
         rtt_x_tests=("rtt_x_tests", "sum"),
         ookla_tests=("tests", "sum"),
-    ).reset_index()
+    )
+    if has_devices:
+        agg_kwargs["ookla_devices"] = ("devices", "sum")
+    grouped = joined.groupby("h3_index").agg(**agg_kwargs).reset_index()
     grouped["ookla_dl_mbps"] = grouped["dl_x_tests"] / grouped["ookla_tests"]
     grouped["ookla_rtt_ms"] = grouped["rtt_x_tests"] / grouped["ookla_tests"]
 
-    result = grid_gdf[["h3_index"]].merge(
-        grouped[["h3_index", "ookla_dl_mbps", "ookla_rtt_ms", "ookla_tests"]], on="h3_index", how="left"
-    )
+    keep_cols = ["h3_index", "ookla_dl_mbps", "ookla_rtt_ms", "ookla_tests"]
+    if has_devices:
+        keep_cols.append("ookla_devices")
+    result = grid_gdf[["h3_index"]].merge(grouped[keep_cols], on="h3_index", how="left")
+    if not has_devices:
+        result["ookla_devices"] = np.nan
     result["ookla_is_synthetic"] = result["ookla_dl_mbps"].isna()
     n_real = int((~result["ookla_is_synthetic"]).sum())
 
@@ -359,9 +396,8 @@ def load_osm(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
 
     try:
         import pyrosm
-        osm = pyrosm.OSM(str(path), bounding_box=[
-            STUDY_BBOX["min_lon"], STUDY_BBOX["min_lat"], STUDY_BBOX["max_lon"], STUDY_BBOX["max_lat"],
-        ])
+        min_lon, min_lat, max_lon, max_lat = extraction_bounds(grid_gdf)
+        osm = pyrosm.OSM(str(path), bounding_box=[min_lon, min_lat, max_lon, max_lat])
 
         poi_categories = {
             "poi_education_count": {"amenity": ["school", "university", "college", "kindergarten"]},
@@ -438,6 +474,59 @@ def load_osm(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
 # 5 & 6. WorldPop raster + OpenDOSM census (population)
 # --------------------------------------------------------------------------
 
+def _resolve_dosm_national_total(dosm: pd.DataFrame, filename: str):
+    """
+    Bug fixed here: the previous version computed `dosm["population"].sum()`
+    over the ENTIRE file — population_malaysia.csv is data.gov.my's national
+    time series from 1970-2025, broken out by sex/age/ethnicity, with
+    population in THOUSANDS. Summing every row summed every year and every
+    overlapping subgroup (totals AND their own male/female/age/ethnicity
+    breakdowns) together, producing a meaningless ~9.5 million figure — for
+    comparison the actual latest single overall row (2025, both sexes,
+    overall age, overall ethnicity) is ~34,231.7 thousand = ~34.2 million,
+    Malaysia's real population.
+
+    This isolates that single row instead: filters sex/age/ethnicity
+    columns (if present) to their "overall"/"both" aggregate values, takes
+    the latest date, and requires exactly one matching row before trusting
+    it. If the file's schema doesn't match what's expected, this logs a
+    warning and returns None rather than silently falling back to a sum
+    that would be wrong in a different way.
+    """
+    if "population" not in dosm.columns:
+        logger.warning("OpenDOSM file %s has no 'population' column — skipping sanity check.", filename)
+        return None
+
+    col_map = {c.lower(): c for c in dosm.columns}
+    mask = pd.Series(True, index=dosm.index)
+    overall_terms = {"overall", "both", "both sexes", "all"}
+    for key in ("sex", "age", "ethnicity"):
+        if key in col_map:
+            values_lower = dosm[col_map[key]].astype(str).str.strip().str.lower()
+            match = values_lower.isin(overall_terms)
+            if match.any():
+                mask &= match
+
+    subset = dosm[mask]
+    date_col = next((col_map[c] for c in ("date", "year") if c in col_map), None)
+    if date_col is not None and not subset.empty:
+        subset = subset[subset[date_col] == subset[date_col].max()]
+
+    if len(subset) != 1:
+        logger.warning(
+            "OpenDOSM file %s: expected exactly 1 national-aggregate row after filtering to the latest "
+            "date + overall sex/age/ethnicity, found %d (columns: %s). Skipping the sanity check rather "
+            "than guessing which row is correct — previous behaviour of summing every row produced a "
+            "meaningless ~9.5M figure by adding every year and every subgroup together.",
+            filename, len(subset), list(dosm.columns),
+        )
+        return None
+
+    raw_value = float(subset["population"].iloc[0])
+    # data.gov.my's population_malaysia.csv reports population in THOUSANDS.
+    return raw_value * 1000.0
+
+
 def load_population(grid_gdf: gpd.GeoDataFrame, osm_df: pd.DataFrame) -> pd.DataFrame:
     """
     population from WorldPop 2020 (zonal statistics: 
@@ -493,18 +582,21 @@ def load_population(grid_gdf: gpd.GeoDataFrame, osm_df: pd.DataFrame) -> pd.Data
 
     if dosm_path.exists():
         dosm = pd.read_csv(dosm_path)
-        dosm_total = dosm["population"].sum() if "population" in dosm.columns else None
+        dosm_total = _resolve_dosm_national_total(dosm, dosm_path.name)
         worldpop_total = pop_sum.sum()
         if dosm_total:
             ratio = worldpop_total / dosm_total
             logger.info(
-                "Population consistency check: WorldPop study-area sum = %.0f vs. OpenDOSM referenced total = "
-                "%.0f (ratio = %.3f). A ratio far from the study area's expected share of that total warrants "
-                "investigation, not silent correction.",
+                "Population sanity check (ORDER-OF-MAGNITUDE ONLY — population_malaysia.csv is a NATIONAL "
+                "time series, not a Klang Valley or district-level table, so this is not a validation of the "
+                "study area's population; it only confirms WorldPop's study-area sum is a plausible small "
+                "fraction of Malaysia's national total, not an obviously corrupted raster read): WorldPop "
+                "study-area sum = %.0f vs. OpenDOSM national total = %.0f (ratio = %.4f). No correction is "
+                "ever applied — this is logged for investigation only.",
                 worldpop_total, dosm_total, ratio,
             )
     else:
-        logger.warning("OpenDOSM file missing (%s) — skipping population consistency check.", dosm_path.name)
+        logger.warning("OpenDOSM file missing (%s) — skipping population sanity check.", dosm_path.name)
 
     logger.info("Population: WorldPop zonal statistics computed for %d cells.", n)
     return result
@@ -535,11 +627,28 @@ def load_ridership_surge_factor(dates: pd.Series) -> pd.Series:
 
     df = pd.read_csv(path, parse_dates=["date"])
     # The CSV has individual mode columns (bus_rkl, rail_lrt_ampang, etc.)
-    # rather than a single 'ridership' column — sum all numeric columns per
-    # date row to get the daily total ridership across all modes.
+    # rather than a single 'ridership' column — sum numeric columns per date
+    # to get a daily total. Bug fixed here: this used to sum EVERY numeric
+    # column indiscriminately, including national/non-Klang-Valley services
+    # (ETS, Intercity, Komuter Utara, Tebrau — inter-city and northern/
+    # southern-region rail, nothing to do with Klang Valley commuter
+    # demand), diluting a "Klang Valley activity" signal with unrelated
+    # national rail volume. Now excludes any column matching a known
+    # non-Klang-Valley keyword; logs exactly what was excluded so this is
+    # auditable rather than a silent filter.
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    non_klang_valley_keywords = ("ets", "intercity", "komuter_utara", "tebrau")
+    klang_valley_cols = [c for c in numeric_cols if not any(kw in c.lower() for kw in non_klang_valley_keywords)]
+    excluded_cols = [c for c in numeric_cols if c not in klang_valley_cols]
+    if excluded_cols:
+        logger.info(
+            "Ridership: excluded non-Klang-Valley service columns from the surge signal: %s "
+            "(kept as Klang Valley demand indicators: %s)",
+            excluded_cols, klang_valley_cols,
+        )
+    numeric_cols = klang_valley_cols
     if not numeric_cols:
-        logger.warning("Ridership CSV has no numeric columns — using flat surge factor.")
+        logger.warning("Ridership CSV has no Klang-Valley-relevant numeric columns — using flat surge factor.")
         return pd.Series(1.0, index=dates.index)
     df["_total_ridership"] = df[numeric_cols].sum(axis=1)
     daily_total = df.groupby("date")["_total_ridership"].sum()
@@ -549,8 +658,80 @@ def load_ridership_surge_factor(dates: pd.Series) -> pd.Series:
     norm = daily_total / daily_total.mean()
     factor_by_date = norm.to_dict()
     surge = dates.map(lambda d: factor_by_date.get(pd.Timestamp(d), 1.0))
-    logger.info("Ridership: real daily surge factors applied (range %.2f-%.2f).", surge.min(), surge.max())
+
+    file_min_date, file_max_date = daily_total.index.min(), daily_total.index.max()
+    panel_min_date, panel_max_date = dates.min(), dates.max()
+    if surge.min() == 1.0 and surge.max() == 1.0:
+        # Bug fixed here: this used to fire silently for every panel run
+        # because the panel's hardcoded date range (2026-07-20 onward) fell
+        # entirely after ridership_headline.csv's coverage (through
+        # 2026-06-30) — every date lookup fell back to the 1.0 default, so
+        # ridership contributed nothing despite the file being real and the
+        # aggregation logic being correct. build_dynamic_panel now derives
+        # the panel's date range FROM this file's actual coverage (see
+        # resolve_panel_date_range), so this warning firing again would mean
+        # that derivation itself has regressed.
+        logger.warning(
+            "Ridership surge factor is flat at 1.0 for all %d panel dates (panel range %s-%s) despite "
+            "%s covering %s-%s — the panel's date range does not overlap the ridership file's coverage, "
+            "so ridership is contributing NO temporal signal. Check resolve_panel_date_range().",
+            len(dates), panel_min_date.date(), panel_max_date.date(),
+            path.name, file_min_date.date(), file_max_date.date(),
+        )
+    else:
+        logger.info(
+            "Ridership: real daily surge factors applied (range %.2f-%.2f) for panel dates %s-%s, "
+            "drawn from %s's real coverage %s-%s.",
+            surge.min(), surge.max(), panel_min_date.date(), panel_max_date.date(),
+            path.name, file_min_date.date(), file_max_date.date(),
+        )
     return surge
+
+
+def resolve_panel_date_range(days: int, fallback_start: str = "2026-07-20") -> pd.Timestamp:
+    """
+    Bug fixed here: the panel's start date used to be hardcoded to
+    "2026-07-20" regardless of what dates ridership_headline.csv actually
+    covered. The file's real coverage ends 2026-06-30, so every panel run
+    picked a date range with ZERO overlap — ridership_surge silently came
+    back flat (1.0 for every date) even though the aggregation code itself
+    was correct.
+
+    This instead picks a `days`-length window ending on the ridership
+    file's own most recent available date, so the panel's dates are
+    GUARANTEED to overlap real ridership data whenever the file exists.
+    Falls back to `fallback_start` (with a clear warning) only if the file
+    is missing or unreadable — in that case there is no ridership signal to
+    align to regardless of what date is chosen.
+    """
+    path = RAW_DATASETS["ridership"]
+    if not path.exists():
+        logger.warning(
+            "Ridership file missing (%s) — panel date range falls back to hardcoded %s (no ridership "
+            "signal available regardless of date choice).",
+            path.name, fallback_start,
+        )
+        return pd.Timestamp(fallback_start)
+
+    try:
+        df = pd.read_csv(path, parse_dates=["date"], usecols=["date"])
+        if df.empty:
+            raise ValueError("ridership file has no rows")
+        latest_date = df["date"].max().normalize()
+    except Exception as exc:
+        logger.warning(
+            "Could not read dates from ridership file %s (%s) — panel date range falls back to "
+            "hardcoded %s.", path.name, exc, fallback_start,
+        )
+        return pd.Timestamp(fallback_start)
+
+    start = latest_date - pd.Timedelta(days=days - 1)
+    logger.info(
+        "Panel date range resolved from ridership file's real coverage: %s to %s (%d days), so ridership "
+        "surge factors will be real, non-flat values rather than a silent 1.0 fallback.",
+        start.date(), latest_date.date(), days,
+    )
+    return start
 
 
 # --------------------------------------------------------------------------
@@ -594,7 +775,8 @@ def build_dynamic_panel(grid_gdf: gpd.GeoDataFrame, static_df: pd.DataFrame,
     If your goal is a defensible, non-simulated modelling dataset, use
     build_static_qoe_baseline() instead — it never fabricates a value.
     """
-    timestamps = pd.date_range(start="2026-07-20 00:00:00", periods=24 * days, freq="1h")
+    panel_start = resolve_panel_date_range(days)
+    timestamps = pd.date_range(start=panel_start, periods=24 * days, freq="1h")
     dates = pd.Series([pd.Timestamp(ts.date()) for ts in timestamps])
     ridership_surge = load_ridership_surge_factor(dates)
 
@@ -623,6 +805,9 @@ def build_dynamic_panel(grid_gdf: gpd.GeoDataFrame, static_df: pd.DataFrame,
             real_dl = o.get("ookla_dl_mbps")
             real_rtt = o.get("ookla_rtt_ms")
             has_real_qoe = pd.notna(real_dl) and pd.notna(real_rtt)
+            # Explicit provenance string per review request — a human-readable
+            # complement to the qoe_level_is_ookla_anchored boolean.
+            qoe_baseline_source = "ookla_q4_2024_static_anchor" if has_real_qoe else "no_real_anchor_simulated_only"
 
             if has_real_qoe:
                 base_dl = max(2.0, real_dl / (1.0 + 0.3 * (demand_mult - 1.0)))
@@ -635,7 +820,31 @@ def build_dynamic_panel(grid_gdf: gpd.GeoDataFrame, static_df: pd.DataFrame,
             jitter = max(1.0, base_rtt * 0.2 + np.random.normal(0, 1.0))
             loss_pct = float(np.clip(load_factor * 0.8 - 0.5 + np.random.normal(0, 0.2), 0.0, 10.0))
             real_tests = o.get("ookla_tests")
-            sample_count = int(real_tests) if pd.notna(real_tests) and real_tests else int(np.random.poisson(6 + load_factor * 5))
+
+            # Bug fixed here: this used to do
+            #   sample_count = int(real_tests) if has_real_qoe else poisson(...)
+            # i.e. for anchored cells it assigned the REAL QUARTERLY Ookla
+            # test count IDENTICALLY to all 168 simulated hours — e.g. a
+            # cell with 342 real tests over the whole quarter would show
+            # "342 tests" at every single simulated hour, inflating
+            # qoe_confidence_score (= min(1, test_sample_count/10)) to a
+            # constant, misleadingly high value all week. The real
+            # quarterly total says nothing about per-hour sample density.
+            # Fixed: derive an HOURLY-equivalent Poisson rate from the real
+            # quarterly total (quarterly total / ~2160 hours/quarter),
+            # scaled by the same demand_mult as everything else, so
+            # anchored cells get a plausible simulated per-hour count
+            # informed by their real overall volume rather than either a
+            # generic constant (unanchored cells) or the literal quarterly
+            # number (the bug). The real quarterly totals are preserved
+            # separately and honestly below, never presented as hourly.
+            HOURS_PER_OOKLA_QUARTER = 2160  # ~90 days x 24h
+            real_devices = o.get("ookla_devices")
+            if has_real_qoe and pd.notna(real_tests) and real_tests:
+                hourly_rate = max(0.3, (real_tests / HOURS_PER_OOKLA_QUARTER) * demand_mult)
+            else:
+                hourly_rate = 6 + load_factor * 5
+            sample_count = int(np.random.poisson(hourly_rate))
 
             records.append({
                 "h3_index": cell,
@@ -645,8 +854,18 @@ def build_dynamic_panel(grid_gdf: gpd.GeoDataFrame, static_df: pd.DataFrame,
                 "rtt_median": base_rtt, "rtt_mean": base_rtt * 1.05, "rtt_std": base_rtt * 0.2,
                 "jitter_median": jitter, "loss_median": loss_pct,
                 "test_sample_count": sample_count, "unique_device_count": max(1, int(sample_count * 0.7)),
+                # Real, honestly-labeled QUARTERLY totals (constant across all
+                # 168 hours for a given cell by definition — they are NOT a
+                # per-hour figure and must never be treated as one).
+                "ookla_quarter_test_count": float(real_tests) if pd.notna(real_tests) else np.nan,
+                "ookla_quarter_device_count": float(real_devices) if pd.notna(real_devices) else np.nan,
+                "qoe_baseline_source": qoe_baseline_source,
                 "qoe_level_is_ookla_anchored": has_real_qoe,
                 "qoe_hourly_shape_is_simulated": True,
+                # Explicit export of the ridership signal, per review request
+                # — previously only folded silently into demand_mult with no
+                # standalone column a modelling team could inspect directly.
+                "ridership_daily_surge_factor": float(surge),
             })
 
     return pd.DataFrame(records)

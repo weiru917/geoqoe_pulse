@@ -91,6 +91,35 @@ def validate_static_features(static_df: pd.DataFrame, report: ValidationReport) 
             report.warn("%.1f%% of cells use a SYNTHETIC fallback for '%s' (raw file missing).",
                         100 * frac, col.replace("_is_synthetic", ""))
 
+    # Regression guard for the extraction-bounding-box mismatch bug: real
+    # (is_synthetic == False) sources should still have a real, uneven
+    # spatial distribution of zero counts, not a suspiciously high FLAT
+    # fraction of zeros across the whole grid — that pattern is what
+    # "raw records silently pre-filtered out by a too-small bounding box"
+    # looks like (every cell outside the box reads as a confirmed-real
+    # zero, not a fallback). Real infrastructure data is uneven but rarely
+    # this uniform; >60% is a conservative trigger, not a hard proof.
+    zero_check_cols = {
+        "building_count": "building_is_synthetic",
+        "tower_count": "tower_is_synthetic",
+        "road_length_m": "osm_is_synthetic",
+    }
+    for count_col, synthetic_col in zero_check_cols.items():
+        if count_col in static_df.columns and synthetic_col in static_df.columns:
+            real_mask = ~static_df[synthetic_col].astype(bool)
+            if real_mask.sum() == 0:
+                continue
+            zero_frac = (static_df.loc[real_mask, count_col] == 0).mean()
+            if zero_frac > 0.60:
+                report.warn(
+                    "%.1f%% of REAL (non-synthetic) cells have %s == 0 — this can be genuine sparse "
+                    "infrastructure, but it's also the exact symptom of a raw-file extraction bounding "
+                    "box that's smaller than the actual study grid (every cell outside the box reads as "
+                    "a confirmed-real zero rather than a fallback). Sanity-check extraction_bounds() "
+                    "against grid_gdf.total_bounds if this fires unexpectedly.",
+                    100 * zero_frac, count_col,
+                )
+
 
 def validate_panel(panel_df: pd.DataFrame, expected_cells: int, report: ValidationReport,
                     freq: str = "1h") -> None:

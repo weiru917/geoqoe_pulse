@@ -78,13 +78,17 @@ STUDY_AREA_LABEL = (
 )
 
 # Fallback bounding box — only used if STUDY_BOUNDARY_PATH is missing, and a
-# clear warning is logged whenever this fallback fires. Kept for backward
-# compatibility with the original rectangular-bbox workflow.
+# clear warning is logged whenever this fallback fires. Widened to match the
+# real trimmed Klang Valley core boundary's actual extent (previously this
+# was a much smaller box that had also — incorrectly — been reused as the
+# raw-file extraction filter in data_downloader.py; that usage is now fixed
+# to derive extraction bounds from the real grid via extraction_bounds(),
+# so this box is ONLY the last-resort grid-generation fallback).
 STUDY_BBOX = {
-    "min_lon": 101.50,
-    "min_lat": 3.00,
-    "max_lon": 101.80,
-    "max_lat": 3.30
+    "min_lon": 101.15,
+    "min_lat": 2.55,
+    "max_lon": 102.02,
+    "max_lat": 3.45,
 }
 
 # --------------------------------------------------------------------------
