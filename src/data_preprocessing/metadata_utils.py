@@ -104,13 +104,21 @@ def generate_metadata(base_dir: Path, output_dir: Path,
             "No real network capacity/traffic/utilisation data exists. demand_pressure_* features "
             "are exposure/activity PROXIES, not a measurement of actual load vs. capacity — do not "
             "claim 'confirmed congestion', only 'QoE degradation associated with estimated demand pressure'.",
-            f"Study area is {STUDY_AREA_LABEL} Kuala Lumpur itself is not covered by any layer in this "
-            "pipeline (no KL boundary file was available) — every hotspot/demand result excludes the "
-            "country's highest-demand urban core.",
+            f"Study area is {STUDY_AREA_LABEL}",
+            "On the SIMULATED hourly panel (cell_time_dataset.parquet), positive "
+            "target_is_degraded_next_1h labels are concentrated in Ookla-anchored cells — see "
+            "run_full_validation's validate_target_anchor_correlation warnings for the exact current "
+            "split. qoe_level_is_ookla_anchored can be a near-trivial predictor of the target on this "
+            "simulated panel; report metrics split by anchor status, or restrict training/eval to "
+            "anchored cells, rather than trusting one aggregate PR-AUC.",
             "tower_count is a deduplicated approximation of physical sites (rounding-based clustering of "
             "OpenCellID records), not an authoritative operator site inventory.",
             "target_qoe_index / target_service_quality_1to5 are a custom composite index, not a validated "
             "ITU-T G.107 E-model MOS.",
+            "h3_parent_res6 (res-6 H3 parent, ~130 groups over the current grid) is provided on every "
+            "output table for SPATIAL HOLDOUT splits — group by it and hold out whole groups; do not "
+            "randomly sample individual h3_index rows for a test set, spatially neighbouring res-8 "
+            "cells are autocorrelated and a random split will leak.",
         ],
         "pandas_version": pd.__version__,
     }

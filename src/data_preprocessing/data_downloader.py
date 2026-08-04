@@ -745,7 +745,11 @@ def build_static_features(grid_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
     osm = load_osm(grid_gdf)
     population = load_population(grid_gdf, osm)
 
-    static_df = grid_gdf[["h3_index"]].merge(towers, on="h3_index", how="left")
+    # Carry the spatial-holdout grouping key through into every downstream
+    # table (static features, static QoE baseline, and — via run_pipeline's
+    # static_df -> panel_df merge — the hourly panel too) so nobody has to
+    # re-derive h3.cell_to_parent() by hand to run a spatial holdout split.
+    static_df = grid_gdf[["h3_index", "h3_parent_res6"]].merge(towers, on="h3_index", how="left")
     static_df = static_df.merge(buildings, on="h3_index", how="left")
     static_df = static_df.merge(osm, on="h3_index", how="left")
     static_df = static_df.merge(population, on="h3_index", how="left")

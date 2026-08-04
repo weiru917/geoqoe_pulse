@@ -76,7 +76,7 @@ logger = logging.getLogger("run_pipeline")
 # spatial_lag_rtt_median (both direct functions of the same-hour target
 # inputs) at all.
 # --------------------------------------------------------------------------
-STRUCTURAL_COLS = {"h3_index", "timestamp", "row_id"}
+STRUCTURAL_COLS = {"h3_index", "timestamp", "row_id", "h3_parent_res6"}
 
 # Constant / zero-information columns — never useful as a feature regardless
 # of target mode.
@@ -117,6 +117,40 @@ STRING_CATEGORICAL_COLS = set(CATEGORICAL_ENCODINGS.keys())
 # historical_hotspot_freq, qoe_confidence_score).
 PRIORITY_SCORE_COLS = {"priority_exposure_score", "priority_base_score"}
 
+# NEW: columns that determine (rather than merely correlate with) whether
+# the SIMULATED hourly panel's degradation target can be positive at all —
+# see data_validator.validate_target_anchor_correlation, which found that
+# on this panel 100% of positive target_is_degraded_next_1h labels came
+# from qoe_level_is_ookla_anchored == True cells. That's not a soft
+# correlation to flag and leave in (the way demand_pressure_index's
+# historical_qoe circularity is handled) — a model with direct access to
+# this column, or the quarterly counts that are only ever non-null when it
+# is True, could trivially learn "is this cell anchored" instead of any
+# genuine demand/QoE pattern. Hard-excluded from BOTH target modes for the
+# panel/targets tables (a modelling team that deliberately wants to
+# stratify by anchor status can still do so explicitly — this only changes
+# the SAFE DEFAULT feature list).
+ANCHOR_STATUS_LEAKAGE_COLS = {
+    "qoe_level_is_ookla_anchored", "qoe_baseline_source",
+    "ookla_quarter_test_count", "ookla_quarter_device_count",
+}
+
+# NEW: on cell_static_qoe_baseline.parquet specifically, these ARE the
+# target (ookla_dl_mbps / ookla_rtt_ms / ookla_tests, per the README's
+# "Option A" recommended workflow) or a direct derivative/split-indicator
+# of it (has_real_ookla_label, qoe_risk_label — qoe_risk_label is literally
+# thresholded from ookla_dl_mbps; ookla_is_synthetic is has_real_ookla_label
+# inverted under a different name). None of these belong in a feature list
+# for predicting Ookla QoE from GIS features — the previous version of
+# build_feature_dictionary never actually applied this or any other
+# exclusion to the two static tables at all (see the "timestamp in
+# df.columns" branch fix below), so it flagged h3_index, h3_parent_res6,
+# and all of the columns below as approved ML features.
+BASELINE_TARGET_AND_LABEL_COLS = {
+    "ookla_dl_mbps", "ookla_rtt_ms", "ookla_tests", "ookla_devices",
+    "has_real_ookla_label", "qoe_risk_label", "ookla_is_synthetic",
+}
+
 
 def _target_cols(df: pd.DataFrame) -> set:
     return {c for c in df.columns if c.startswith("target_")}
@@ -135,13 +169,39 @@ def get_feature_columns(df: pd.DataFrame, target_mode: str) -> list:
                                   values and their spatial lags ARE legitimate
                                   features here, because they are genuinely
                                   observed before the hour being predicted.
+
+    Works on any of the four output tables, not just the hourly panel —
+    static per-cell tables (no "timestamp" column) go through exactly the
+    same exclusion logic rather than a separate "everything is a feature"
+    shortcut (see build_feature_dictionary's previous "timestamp in
+    df.columns" branch, now removed).
     """
     if target_mode not in ("current", "next_hour"):
         raise ValueError('target_mode must be "current" or "next_hour"')
 
-    exclude = set(STRUCTURAL_COLS) | set(CONSTANT_COLS) | _target_cols(df) | STRING_CATEGORICAL_COLS | PRIORITY_SCORE_COLS
+    exclude = (
+        set(STRUCTURAL_COLS) | set(CONSTANT_COLS) | _target_cols(df) | STRING_CATEGORICAL_COLS
+        | PRIORITY_SCORE_COLS | ANCHOR_STATUS_LEAKAGE_COLS | BASELINE_TARGET_AND_LABEL_COLS
+    )
     if target_mode == "current":
         exclude |= RAW_QOE_OBSERVATION_COLS | SAME_HOUR_QOE_DERIVED_COLS
+
+    # Defensive dtype catch-all: any remaining free-text/string column (e.g.
+    # a future provenance/label string nobody remembered to add to a named
+    # exclusion set above) is dropped from the approved feature list rather
+    # than silently handed to a tree-based learner that would choke on it,
+    # or — worse — encoded by surprise into something that looks like a
+    # legitimate numeric feature. Checks numeric/bool-ness rather than
+    # `dtype == object` specifically, because pandas' newer Arrow-backed
+    # StringDtype columns (dtype shows as "str", not "object" — e.g.
+    # tower_source in this pipeline) would otherwise slip through a
+    # numpy-object-only check.
+    import pandas.api.types as ptypes
+    exclude |= {
+        c for c in df.columns
+        if not (ptypes.is_numeric_dtype(df[c]) or ptypes.is_bool_dtype(df[c]))
+        and c not in exclude
+    }
 
     return [c for c in df.columns if c not in exclude]
 
@@ -150,6 +210,7 @@ COLUMN_DESCRIPTIONS = {
     "h3_index": "Uber H3 res-8 cell identifier (join key).",
     "timestamp": "Hourly timestamp (UTC-naive, local Klang Valley convention).",
     "row_id": "Surrogate unique row identifier (h3_index + timestamp composite, as int).",
+    "h3_parent_res6": "Coarse H3 resolution-6 parent of h3_index (~130 groups over the current grid). Use for SPATIAL HOLDOUT splits — hold out whole groups, don't randomly sample individual h3_index values (spatially autocorrelated neighbours would leak across a random split). Structural/grouping key, not an ML feature.",
     "dl_median": "Median simulated download throughput (Mbps) for this cell-hour. NOT a measurement — see config.SIMULATION_DISCLAIMER.",
     "dl_mean": "dl_median x 1.05 (formula-derived, not an independent statistic). Excluded from features when predicting the SAME-HOUR target (leakage); allowed for next-hour prediction.",
     "dl_std": "dl_median x 0.15 (formula-derived). Same leakage caveat as dl_mean.",
@@ -262,8 +323,20 @@ def build_feature_dictionary(panel_df: pd.DataFrame, static_df: pd.DataFrame,
         ("qoe_targets", targets_df),
     )
     for name, df in tables:
-        current_features = set(get_feature_columns(df, "current")) if "timestamp" in df.columns else set(df.columns)
-        next_hour_features = set(get_feature_columns(df, "next_hour")) if "timestamp" in df.columns else set(df.columns)
+        # Bug fixed here: this used to fall back to `set(df.columns)` — i.e.
+        # "every column is an approved feature" — for any table without a
+        # "timestamp" column (cell_static_features.parquet and
+        # cell_static_qoe_baseline.parquet, both one-row-per-cell). That
+        # meant h3_index, h3_parent_res6, and — on the baseline table — the
+        # target itself (ookla_dl_mbps/ookla_rtt_ms/ookla_tests) and its
+        # direct derivatives (has_real_ookla_label, qoe_risk_label) were all
+        # flagged is_feature_for_current_target=True / is_feature_for_
+        # next_hour_target=True in feature_dictionary.xlsx. get_feature_
+        # columns() doesn't actually need a "timestamp" column to work
+        # correctly — it only ever inspects column names/dtypes — so it's
+        # now applied uniformly to every table.
+        current_features = set(get_feature_columns(df, "current"))
+        next_hour_features = set(get_feature_columns(df, "next_hour"))
         for col in df.columns:
             rows.append({
                 "file": name,
@@ -369,6 +442,12 @@ def main(days: int = 7):
         f"target_is_degraded_{suffix}", f"target_degradation_class_{suffix}", f"target_qoe_index_{suffix}",
         f"target_{suffix}_valid",
         "qoe_confidence_score",
+        # Carried through so run_full_validation can audit whether the
+        # degradation target is trivially predictable from anchor status
+        # alone (see data_validator.validate_target_anchor_correlation) —
+        # without these, that check would need a separate merge back to
+        # panel_df every time targets_df is used on its own.
+        "qoe_level_is_ookla_anchored", "qoe_baseline_source",
     ]].copy()
 
     # --- 8. Validation ----------------------------------------------------------------

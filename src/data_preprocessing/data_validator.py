@@ -209,6 +209,75 @@ def validate_targets(targets_df: pd.DataFrame, report: ValidationReport) -> None
             100 * invalid_frac, col,
         )
 
+    validate_target_anchor_correlation(targets_df, report)
+
+
+def validate_target_anchor_correlation(targets_df: pd.DataFrame, report: ValidationReport) -> None:
+    """
+    Class-distribution audit against Ookla-anchor status.
+
+    On the SIMULATED hourly panel, cells with no real Ookla quarterly
+    anchor (qoe_level_is_ookla_anchored == False) generate their hourly
+    dl/rtt purely from a population/POI formula (see
+    data_downloader.build_dynamic_panel) that, at the currently configured
+    QOE_THRESHOLDS, may never cross the degradation threshold. If nearly
+    all (or literally all) positive target_is_degraded_next_1h labels come
+    from anchored cells, then qoe_level_is_ookla_anchored — or any feature
+    correlated with it — is a near-trivial predictor of the target: a
+    model could score a high PR-AUC by learning "is this cell anchored"
+    rather than learning a genuine degradation pattern. This is a
+    structural property of how the simulation is built, not something a
+    training-time threshold tweak fixes — the two real options are (a)
+    train/evaluate on anchored cells only, or (b) report metrics split by
+    anchor status so the imbalance isn't hidden inside one aggregate
+    number.
+    """
+    target_col = "target_is_degraded_next_1h"
+    anchor_col = "qoe_level_is_ookla_anchored"
+    valid_col = "target_next_1h_valid"
+    if not {target_col, anchor_col} <= set(targets_df.columns):
+        return
+
+    df = targets_df
+    if valid_col in df.columns:
+        df = df[df[valid_col] == 1]
+    if df.empty:
+        return
+
+    rates = df.groupby(anchor_col)[target_col].mean()
+    counts = df.groupby(anchor_col)[target_col].sum()
+    anchored_rate = float(rates.get(True, 0.0))
+    unanchored_rate = float(rates.get(False, 0.0))
+    anchored_positives = int(counts.get(True, 0))
+    unanchored_positives = int(counts.get(False, 0))
+    total_positives = anchored_positives + unanchored_positives
+
+    if total_positives == 0:
+        return
+
+    if unanchored_positives == 0 and anchored_positives > 0:
+        report.warn(
+            "%s has a 0%% positive rate for cells with NO real Ookla anchor (%s == False) vs %.2f%% for "
+            "anchored cells — ALL %d positive labels in the panel come from the %.1f%% of cells that are "
+            "Ookla-anchored. %s (or anything correlated with it, e.g. ookla_quarter_test_count) is "
+            "therefore a near-perfect trivial predictor of this target on the SIMULATED hourly panel. "
+            "Before training on cell_time_dataset.parquet: either restrict training/evaluation to "
+            "anchored cells only, or report metrics split by %s so a high aggregate PR-AUC can't be "
+            "mistaken for genuine degradation prediction. This is a structural property of the "
+            "simulation formula, not a threshold-tuning bug.",
+            target_col, anchor_col, anchored_rate * 100, total_positives,
+            100 * df[anchor_col].mean(), anchor_col, anchor_col,
+        )
+    elif unanchored_rate > 0 and anchored_rate / max(unanchored_rate, 1e-9) > 5.0:
+        report.warn(
+            "%s positive rate is %.2fx higher for Ookla-anchored cells (%.2f%%) than for unanchored "
+            "cells (%.2f%%) — a large enough gap that anchor status carries real predictive signal "
+            "about the label independent of genuine demand/QoE patterns. Consider reporting metrics "
+            "split by %s.",
+            target_col, anchored_rate / max(unanchored_rate, 1e-9), anchored_rate * 100,
+            unanchored_rate * 100, anchor_col,
+        )
+
 
 def run_full_validation(grid_gdf, static_df, panel_df, targets_df=None) -> ValidationReport:
     report = ValidationReport()

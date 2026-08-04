@@ -1,22 +1,22 @@
 {
-  "pipeline_version": "3.0.0",
-  "generated_at_utc": "2026-08-03T14:51:22.838263+00:00",
-  "git_commit": "4ed43740cfeebce986fc77ac2546e2ad58433dbe",
+  "pipeline_version": "3.2.0",
+  "generated_at_utc": "2026-08-04T21:18:12.999594+00:00",
+  "git_commit": "b7ade8cad3c215dde9b4ac8b2d7d5ac40d5fe7a5",
   "random_seed": 42,
   "crs": {
     "storage_export": "EPSG:4326",
     "distance_area_computation": "EPSG:3375"
   },
   "h3_resolution": 8,
-  "study_area": "Klang Valley core districts (Selangor: Gombak, Hulu Langat, Klang, Petaling, Sepang, Kuala Langat; plus Putrajaya). Kuala Lumpur is NOT included \u2014 see STUDY_BOUNDARY_PATH comment above.",
+  "study_area": "Klang Valley core: Kuala Lumpur federal territory, Putrajaya federal territory, and 6 urbanised Selangor districts (Gombak, Hulu Langat, Klang, Kuala Langat, Petaling, Sepang). Deliberately excludes rural/exurban Selangor (Sabak Bernam, Hulu Selangor, etc.).",
   "study_boundary_source": "study_boundary.geojson",
   "row_counts": {
-    "grid_cells": 4659,
-    "static_rows": 4659,
-    "panel_rows": 782712,
-    "target_rows": 782712,
-    "static_qoe_baseline_rows": 4659,
-    "static_qoe_baseline_real_labels": 2692
+    "grid_cells": 4918,
+    "static_rows": 4918,
+    "panel_rows": 826224,
+    "target_rows": 826224,
+    "static_qoe_baseline_rows": 4918,
+    "static_qoe_baseline_real_labels": 2950
   },
   "source_datasets": {
     "ookla": {
@@ -75,7 +75,7 @@
     "osm": 0.0,
     "population": 0.0,
     "qoe_hourly_shape_simulated": 1.0,
-    "qoe_level_ookla_anchored": 0.5778063962223653
+    "qoe_level_ookla_anchored": 0.5998373322488817
   },
   "primary_ml_target": "target_is_degraded_next_1h",
   "forecast_horizon_hours": 1,
@@ -117,8 +117,6 @@
       "local_moran_i_rtt_median",
       "local_moran_pvalue_rtt_median",
       "local_moran_quadrant_rtt_median_encoded",
-      "ookla_quarter_device_count",
-      "ookla_quarter_test_count",
       "opencellid_record_count",
       "osm_is_synthetic",
       "poi_education_count",
@@ -131,9 +129,7 @@
       "population_density_per_km2",
       "population_is_synthetic",
       "population_night",
-      "qoe_baseline_source",
       "qoe_confidence_score",
-      "qoe_level_is_ookla_anchored",
       "qoe_trend_1h",
       "ridership_daily_surge_factor",
       "road_density_km_per_km2",
@@ -156,7 +152,6 @@
       "tower_count",
       "tower_density_per_km2",
       "tower_is_synthetic",
-      "tower_source",
       "unique_device_count"
     ],
     "for_next_hour_target": [
@@ -202,8 +197,6 @@
       "local_moran_pvalue_rtt_median",
       "local_moran_quadrant_rtt_median_encoded",
       "loss_median",
-      "ookla_quarter_device_count",
-      "ookla_quarter_test_count",
       "opencellid_record_count",
       "osm_is_synthetic",
       "poi_education_count",
@@ -216,9 +209,7 @@
       "population_density_per_km2",
       "population_is_synthetic",
       "population_night",
-      "qoe_baseline_source",
       "qoe_confidence_score",
-      "qoe_level_is_ookla_anchored",
       "qoe_trend_1h",
       "ridership_daily_surge_factor",
       "road_density_km_per_km2",
@@ -246,7 +237,6 @@
       "tower_count",
       "tower_density_per_km2",
       "tower_is_synthetic",
-      "tower_source",
       "ul_mean",
       "ul_median",
       "ul_std",
@@ -256,20 +246,33 @@
   },
   "high_leakage_risk_features": {
     "demand_pressure_index": "Circular with the simulated QoE generator via its historical_qoe component (lag_24h_rtt_median). Use demand_pressure_base instead for a non-circular, real-data-only feature.",
-    "demand_pressure_index_pre_spatial": "Same circularity as demand_pressure_index, pre-spatial-smoothing."
+    "demand_pressure_index_pre_spatial": "Same circularity as demand_pressure_index, pre-spatial-smoothing.",
+    "qoe_level_is_ookla_anchored": "Near-perfectly determines whether target_is_degraded_next_1h can be positive at all on the simulated panel \u2014 see run_full_validation's validate_target_anchor_correlation warning for the current split. Excluded from the default feature list, not just flagged.",
+    "qoe_baseline_source": "Human-readable restatement of qoe_level_is_ookla_anchored \u2014 same exclusion reason.",
+    "ookla_quarter_test_count": "Only non-null when qoe_level_is_ookla_anchored is True \u2014 a direct proxy for anchor status, same exclusion reason.",
+    "ookla_quarter_device_count": "Only non-null when qoe_level_is_ookla_anchored is True \u2014 a direct proxy for anchor status, same exclusion reason.",
+    "ookla_dl_mbps": "This IS the Option A modelling target \u2014 never a feature.",
+    "ookla_rtt_ms": "This IS the Option A modelling target \u2014 never a feature.",
+    "ookla_tests": "Real quarterly Ookla sample count \u2014 target-adjacent, never a feature.",
+    "ookla_devices": "Real quarterly Ookla device count \u2014 target-adjacent, never a feature.",
+    "has_real_ookla_label": "Split indicator (labelled vs. prediction-target cells), not a predictor \u2014 training on it would leak which rows have a real label.",
+    "qoe_risk_label": "Directly thresholded from ookla_dl_mbps (the target) \u2014 using it as a feature reads the answer off a relabelled copy of itself.",
+    "ookla_is_synthetic": "has_real_ookla_label inverted under a different name \u2014 same exclusion reason."
   },
   "simulation_disclosure": {
     "panel_qoe_hourly_shape_is_simulated": true,
     "explanation": "The hourly QoE panel (cell_time_dataset.parquet) is a simulated diurnal-demand scenario, not observed network measurements. It is a software-integration and dashboard-demo fixture only. For a modelling claim that stands up to review, use cell_static_qoe_baseline.parquet (real Ookla-anchored targets, zero synthetic QoE) or obtain real repeated-timestamp QoE measurements before training a forecast model and reporting its accuracy as evidence of real-world skill.",
-    "real_ookla_anchored_cell_fraction": 0.5778063962223653,
+    "real_ookla_anchored_cell_fraction": 0.5998373322488817,
     "recommended_defensible_dataset": "cell_static_qoe_baseline.parquet (real Ookla labels only, zero simulated values)"
   },
   "known_limitations": [
     "No real per-hour/repeated-timestamp QoE measurement source exists in this project (no organiser data was supplied). cell_time_dataset.parquet's hourly QoE values are a simulated diurnal-demand scenario, useful for pipeline/dashboard testing only.",
     "No real network capacity/traffic/utilisation data exists. demand_pressure_* features are exposure/activity PROXIES, not a measurement of actual load vs. capacity \u2014 do not claim 'confirmed congestion', only 'QoE degradation associated with estimated demand pressure'.",
-    "Study area is Klang Valley core districts (Selangor: Gombak, Hulu Langat, Klang, Petaling, Sepang, Kuala Langat; plus Putrajaya). Kuala Lumpur is NOT included \u2014 see STUDY_BOUNDARY_PATH comment above. Kuala Lumpur itself is not covered by any layer in this pipeline (no KL boundary file was available) \u2014 every hotspot/demand result excludes the country's highest-demand urban core.",
+    "Study area is Klang Valley core: Kuala Lumpur federal territory, Putrajaya federal territory, and 6 urbanised Selangor districts (Gombak, Hulu Langat, Klang, Kuala Langat, Petaling, Sepang). Deliberately excludes rural/exurban Selangor (Sabak Bernam, Hulu Selangor, etc.).",
+    "On the SIMULATED hourly panel (cell_time_dataset.parquet), positive target_is_degraded_next_1h labels are concentrated in Ookla-anchored cells \u2014 see run_full_validation's validate_target_anchor_correlation warnings for the exact current split. qoe_level_is_ookla_anchored can be a near-trivial predictor of the target on this simulated panel; report metrics split by anchor status, or restrict training/eval to anchored cells, rather than trusting one aggregate PR-AUC.",
     "tower_count is a deduplicated approximation of physical sites (rounding-based clustering of OpenCellID records), not an authoritative operator site inventory.",
-    "target_qoe_index / target_service_quality_1to5 are a custom composite index, not a validated ITU-T G.107 E-model MOS."
+    "target_qoe_index / target_service_quality_1to5 are a custom composite index, not a validated ITU-T G.107 E-model MOS.",
+    "h3_parent_res6 (res-6 H3 parent, ~130 groups over the current grid) is provided on every output table for SPATIAL HOLDOUT splits \u2014 group by it and hold out whole groups; do not randomly sample individual h3_index rows for a test set, spatially neighbouring res-8 cells are autocorrelated and a random split will leak."
   ],
   "pandas_version": "3.0.3"
 }

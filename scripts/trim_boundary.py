@@ -16,10 +16,17 @@ re-run this only if you re-download a raw extract from scratch.
 Usage:
     python scripts/trim_boundary.py path/to/raw_selangor_gadm.geojson
 
-If/when a real "W.P. Kuala Lumpur" GADM polygon becomes available, download
-it, concatenate its single feature into the FeatureCollection this script
-produces, and re-run the full pipeline (H3 grid + every spatial join
-depends on the boundary) — see config.py's STUDY_BOUNDARY_PATH comment.
+UPDATE: a real "W.P. Kuala Lumpur" polygon (source: nullifye/
+malaysia.geojson, state code KUL — state-level, since GADM has no level-2
+subdivision for a federal territory) has since been merged into the shipped
+data/boundary/study_boundary.geojson directly, alongside the Selangor
+districts this script filters. If you re-run this script against a fresh
+raw Selangor extract (e.g. NAME_1 == "Selangor" from scratch), it will
+output ONLY the Selangor districts + Putrajaya again — you must
+re-concatenate the KL feature back in afterwards (or merge from
+data/boundary/study_boundary.geojson's existing KL row) before treating the
+result as the real study boundary. See config.py's STUDY_BOUNDARY_PATH
+comment for exactly how the KL polygon was sourced and validated.
 """
 import json
 import sys

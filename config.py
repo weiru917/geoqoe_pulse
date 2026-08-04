@@ -42,22 +42,33 @@ CRS_EAST_MYS = "EPSG:3376"  # GDM2000 / East Malaysia BRSO (not used — Klang V
 # --------------------------------------------------------------------------
 # Study Boundary
 # --------------------------------------------------------------------------
-# Real GADM level-2 administrative polygon, dissolved. As of this version it
-# covers the Klang Valley CORE districts only:
-#   Gombak, Hulu Langat, Klang, Petaling, Sepang, Kuala Langat, Putrajaya
+# Real GADM level-2 administrative polygon (Selangor districts + Putrajaya),
+# dissolved with one additional real state-level polygon merged in for KL
+# (GADM has no level-2 subdivision for a federal territory). As of this
+# version it covers the Klang Valley CORE districts:
+#   Gombak, Hulu Langat, Klang, Petaling, Sepang, Kuala Langat, Putrajaya,
+#   Kuala Lumpur
 # Two districts that are NOT part of any common "Klang Valley" definition —
 # Hulu Selangor (rural/interior) and Sabak Bernam (rural, north coast) — were
 # removed from the original full-Selangor GADM extract (see
 # scripts/trim_boundary.py) because they diluted hotspot detection with very
 # low-density, low-POI cells and were never part of the intended study area.
 #
-# KNOWN GAP: Kuala Lumpur (W.P. Kuala Lumpur) is NOT included. No KL boundary
-# file was available when this boundary was built. KL is the single highest
-# mobile-demand area in the country and its absence is a real limitation of
-# every hotspot/demand result in this project. Before treating this as the
-# final study area, download the GADM MYS level-2 "W.P. Kuala Lumpur" polygon
-# and merge it in via KLANG_VALLEY_DISTRICT_NAMES below, then re-run the full
-# pipeline (H3 grid + every spatial join depends on the boundary).
+# FIXED (previously a known gap): Kuala Lumpur (W.P. Kuala Lumpur) was not
+# included in earlier versions — no KL boundary file was available when the
+# original boundary was built. A real WP Kuala Lumpur polygon (source:
+# nullifye/malaysia.geojson, state code KUL; state-level administrative
+# boundary, not GADM level-2, since KL has no further subdivision in GADM)
+# has since been merged into data/boundary/study_boundary.geojson. Sanity
+# checked with point-in-polygon: KLCC (3.1579, 101.7123) and KL Sentral
+# (3.1339, 101.6865) fall inside; Batu Caves (3.2379, 101.6839, in Gombak)
+# and Petaling Jaya (3.1073, 101.6067, in Petaling) fall outside — i.e. it's
+# KL proper, not an oversized box, and it doesn't overlap the existing
+# Selangor/Putrajaya polygons. This added 259 real H3 cells (~222 km^2,
+# 4,659 -> 4,918 at res 8) that were previously invisible to every layer in
+# the pipeline. KL is the country's single highest mobile-demand area, so
+# every hotspot/demand result from before this fix should be treated as
+# incomplete, not just "missing a bit of coverage."
 STUDY_BOUNDARY_PATH = BOUNDARY_DIR / "study_boundary.geojson"
 
 # Defensive filter: if a raw, unfiltered Selangor-wide GADM extract is ever
@@ -65,16 +76,22 @@ STUDY_BOUNDARY_PATH = BOUNDARY_DIR / "study_boundary.geojson"
 # geometry_utils.load_study_boundary() uses this list to automatically drop
 # out-of-scope districts rather than silently including all of Selangor
 # again. Matched against the GADM "NAME_2" column (falls back to "NAME_1"
-# for Putrajaya, which has no NAME_2).
+# for Putrajaya and Kuala Lumpur, neither of which has a NAME_2).
 KLANG_VALLEY_DISTRICT_NAMES = {
-    # Matched against GADM's actual NAME_2 spelling (no spaces).
+    # Matched against GADM's actual NAME_2 spelling (no spaces), plus the
+    # NAME_1/NAME_2 values used by the merged KL polygon (see
+    # STUDY_BOUNDARY_PATH comment above) and a couple of formatting variants
+    # so the filter doesn't silently drop a district over a spelling
+    # difference if the boundary file is ever regenerated from a fresh
+    # source.
     "Gombak", "HuluLangat", "Klang", "Petaling", "Sepang", "KualaLangat",
-    "Putrajaya", "KualaLumpur",  # KualaLumpur included pre-emptively for when KL is added
+    "Putrajaya", "KualaLumpur", "Kuala Lumpur",
 }
 STUDY_AREA_LABEL = (
-    "Klang Valley core districts (Selangor: Gombak, Hulu Langat, Klang, "
-    "Petaling, Sepang, Kuala Langat; plus Putrajaya). Kuala Lumpur is NOT "
-    "included — see STUDY_BOUNDARY_PATH comment above."
+    "Klang Valley core: Kuala Lumpur federal territory, Putrajaya federal "
+    "territory, and 6 urbanised Selangor districts (Gombak, Hulu Langat, "
+    "Klang, Kuala Langat, Petaling, Sepang). Deliberately excludes rural/"
+    "exurban Selangor (Sabak Bernam, Hulu Selangor, etc.)."
 )
 
 # Fallback bounding box — only used if STUDY_BOUNDARY_PATH is missing, and a
@@ -96,6 +113,17 @@ STUDY_BBOX = {
 # --------------------------------------------------------------------------
 H3_PRIMARY_RESOLUTION = 8    # ~0.74 km^2 cell area, ~461m edge
 H3_SECONDARY_RESOLUTION = 9  # ~0.11 km^2 cell area, ~174m edge
+
+# NEW: coarse H3 parent resolution used purely to stamp a spatial-holdout
+# grouping key (`h3_parent_res6`) onto every output row. Nothing in the
+# pipeline previously exposed a grouping column, so a real spatial
+# train/test split (hold out whole groups, not individual res-8 cells)
+# required deriving h3.cell_to_parent() by hand downstream. Res 6 gives
+# ~130 groups over the current (post-KL) grid, each several km across —
+# coarse enough that res-8 cells inside a held-out group are genuinely
+# unseen, not just nominally different h3_index values that a random split
+# could still leak across via spatial autocorrelation.
+SPATIAL_HOLDOUT_RESOLUTION = 6
 
 # --------------------------------------------------------------------------
 # Temporal Configuration
@@ -170,6 +198,53 @@ HIGH_LEAKAGE_RISK_FEATURES = {
     "demand_pressure_index_pre_spatial": (
         "Same circularity as demand_pressure_index, pre-spatial-smoothing."
     ),
+    # NEW — see data_validator.validate_target_anchor_correlation. On the
+    # simulated hourly panel, cells with no real Ookla anchor generate their
+    # hourly dl/rtt from a formula that (at current QOE_THRESHOLDS) may
+    # never cross the degradation threshold, so almost all positive
+    # target_is_degraded_next_1h labels come from anchored cells. These four
+    # columns determine or are only non-null when qoe_level_is_ookla_anchored
+    # is True, so a model with access to them can trivially learn "is this
+    # cell anchored" instead of a genuine demand/QoE pattern. Hard-excluded
+    # from run_pipeline.get_feature_columns()'s default feature list for
+    # BOTH target modes (not just flagged) — see ANCHOR_STATUS_LEAKAGE_COLS.
+    "qoe_level_is_ookla_anchored": (
+        "Near-perfectly determines whether target_is_degraded_next_1h can be "
+        "positive at all on the simulated panel — see run_full_validation's "
+        "validate_target_anchor_correlation warning for the current split. "
+        "Excluded from the default feature list, not just flagged."
+    ),
+    "qoe_baseline_source": (
+        "Human-readable restatement of qoe_level_is_ookla_anchored — same "
+        "exclusion reason."
+    ),
+    "ookla_quarter_test_count": (
+        "Only non-null when qoe_level_is_ookla_anchored is True — a direct "
+        "proxy for anchor status, same exclusion reason."
+    ),
+    "ookla_quarter_device_count": (
+        "Only non-null when qoe_level_is_ookla_anchored is True — a direct "
+        "proxy for anchor status, same exclusion reason."
+    ),
+    # NEW — on cell_static_qoe_baseline.parquet, these ARE the target
+    # (README's "Option A" workflow trains on ookla_dl_mbps / classifies
+    # qoe_risk_label) or a direct derivative/split-indicator of it.
+    # qoe_risk_label in particular is literally thresholded from
+    # ookla_dl_mbps — including it as a "feature" would let a model read
+    # the answer off a relabelled copy of itself.
+    "ookla_dl_mbps": "This IS the Option A modelling target — never a feature.",
+    "ookla_rtt_ms": "This IS the Option A modelling target — never a feature.",
+    "ookla_tests": "Real quarterly Ookla sample count — target-adjacent, never a feature.",
+    "ookla_devices": "Real quarterly Ookla device count — target-adjacent, never a feature.",
+    "has_real_ookla_label": (
+        "Split indicator (labelled vs. prediction-target cells), not a "
+        "predictor — training on it would leak which rows have a real label."
+    ),
+    "qoe_risk_label": (
+        "Directly thresholded from ookla_dl_mbps (the target) — using it as "
+        "a feature reads the answer off a relabelled copy of itself."
+    ),
+    "ookla_is_synthetic": "has_real_ookla_label inverted under a different name — same exclusion reason.",
 }
 
 # --------------------------------------------------------------------------
@@ -239,5 +314,17 @@ SIMULATION_DISCLAIMER = (
 # --------------------------------------------------------------------------
 # Pipeline / Metadata
 # --------------------------------------------------------------------------
-PIPELINE_VERSION = "3.0.0"  # bumped: target-consistency, leakage, and
-                             # boundary-scope fixes applied — see CHANGELOG.md
+PIPELINE_VERSION = "3.2.0"  # 3.0.0: target-consistency, leakage, and boundary-
+                             #   scope fixes.
+                             # 3.1.0: raw-file extraction bounds fix
+                             #   (extraction_bounds() derives from the real
+                             #   grid) — README already documented this as
+                             #   "v3.1.0" before this constant was bumped to
+                             #   match; fixed here too.
+                             # 3.2.0 (this pass): Kuala Lumpur merged into
+                             #   the study boundary (4,659 -> 4,918 cells),
+                             #   h3_parent_res6 spatial-holdout grouping key
+                             #   added to every output table, and an
+                             #   automated anchor-status/target-leakage audit
+                             #   added to data_validator.py.
+                             # See CHANGELOG.md for full detail.
