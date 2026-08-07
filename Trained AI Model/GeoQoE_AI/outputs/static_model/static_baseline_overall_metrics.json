@@ -1,0 +1,43 @@
+{
+    "dataset": "cell_static_qoe_baseline.parquet",
+    "data_status": "real quarterly Ookla targets",
+    "target": "ookla_dl_mbps",
+    "approved_features": [
+        "tower_density_per_km2",
+        "dist_to_nearest_tower_m",
+        "building_density_per_km2",
+        "built_up_ratio",
+        "avg_building_footprint_m2",
+        "poi_education_count",
+        "poi_healthcare_count",
+        "poi_retail_food_count",
+        "poi_office_count",
+        "poi_recreation_count",
+        "poi_transport_stop_count",
+        "road_density_km_per_km2",
+        "intersection_density_per_km2",
+        "dist_to_nearest_transit_m",
+        "population_density_per_km2",
+        "population_day"
+    ],
+    "number_of_features": 16,
+    "labelled_cells": 2950,
+    "spatial_groups": 113,
+    "cross_validation": "5-fold GroupKFold by h3_parent_res6",
+    "ridge_alpha": 10.0,
+    "total_training_seconds": 0.11318430001847446,
+    "median_dummy_oof": {
+        "mae_mbps": 86.03360722188374,
+        "rmse_mbps": 117.77829854310636,
+        "r2": -0.006517997968650713,
+        "spearman_correlation": -0.016839083213839152
+    },
+    "ridge_oof": {
+        "mae_mbps": 83.56222135541067,
+        "rmse_mbps": 116.07719745287257,
+        "r2": 0.022346811612326656,
+        "spearman_correlation": 0.274510408994097
+    },
+    "ridge_mae_improvement_over_dummy_mbps": 2.471385866473071,
+    "ridge_rmse_improvement_over_dummy_mbps": 1.7011010902337915
+}

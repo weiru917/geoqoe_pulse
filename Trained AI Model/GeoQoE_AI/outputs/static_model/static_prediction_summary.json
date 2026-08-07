@@ -1,0 +1,113 @@
+{
+    "dataset": "cell_static_qoe_baseline.parquet",
+    "data_status": "real quarterly Ookla targets with AI estimates for unlabelled cells",
+    "selected_model": "confidence_weighted XGBoost",
+    "ensemble": "mean of five spatial GroupKFold models",
+    "model_feature_count": 16,
+    "model_features": [
+        "tower_density_per_km2",
+        "dist_to_nearest_tower_m",
+        "building_density_per_km2",
+        "built_up_ratio",
+        "avg_building_footprint_m2",
+        "poi_education_count",
+        "poi_healthcare_count",
+        "poi_retail_food_count",
+        "poi_office_count",
+        "poi_recreation_count",
+        "poi_transport_stop_count",
+        "road_density_km_per_km2",
+        "intersection_density_per_km2",
+        "dist_to_nearest_transit_m",
+        "population_density_per_km2",
+        "population_day"
+    ],
+    "total_cells": 4918,
+    "observed_ookla_cells": 2950,
+    "ai_estimated_cells": 1968,
+    "honest_oof_metrics": {
+        "mae_mbps": 82.2967118871546,
+        "rmse_mbps": 116.17850958998605,
+        "r2": 0.02063947613845274
+    },
+    "ensemble_disagreement": {
+        "interpretation": "relative disagreement among five fold models; not a calibrated confidence interval",
+        "low_moderate_boundary_mbps": 10.095674880956974,
+        "moderate_high_boundary_mbps": 14.181363716311598,
+        "unlabelled_mean_std_mbps": 13.068932418355976,
+        "unlabelled_median_std_mbps": 11.526087987459917
+    },
+    "top_features": [
+        {
+            "variant": "confidence_weighted",
+            "feature": "population_density_per_km2",
+            "mean_gain_importance": 35912.746484375,
+            "std_gain_importance": 3461.8669851100885,
+            "gain_fraction_within_variant": 0.0907136061231421
+        },
+        {
+            "variant": "confidence_weighted",
+            "feature": "population_day",
+            "mean_gain_importance": 30983.33046875,
+            "std_gain_importance": 2545.7725433762266,
+            "gain_fraction_within_variant": 0.0782621746222663
+        },
+        {
+            "variant": "confidence_weighted",
+            "feature": "dist_to_nearest_transit_m",
+            "mean_gain_importance": 26072.239453125,
+            "std_gain_importance": 1040.7732976656664,
+            "gain_fraction_within_variant": 0.0658570310552005
+        },
+        {
+            "variant": "confidence_weighted",
+            "feature": "building_density_per_km2",
+            "mean_gain_importance": 25719.264453125,
+            "std_gain_importance": 830.3448386589575,
+            "gain_fraction_within_variant": 0.0649654357789872
+        },
+        {
+            "variant": "confidence_weighted",
+            "feature": "tower_density_per_km2",
+            "mean_gain_importance": 25490.29453125,
+            "std_gain_importance": 1150.1304263361408,
+            "gain_fraction_within_variant": 0.0643870704535712
+        },
+        {
+            "variant": "confidence_weighted",
+            "feature": "poi_retail_food_count",
+            "mean_gain_importance": 25181.12265625,
+            "std_gain_importance": 2081.345303886977,
+            "gain_fraction_within_variant": 0.0636061194420604
+        },
+        {
+            "variant": "confidence_weighted",
+            "feature": "avg_building_footprint_m2",
+            "mean_gain_importance": 24996.01640625,
+            "std_gain_importance": 1809.836892438015,
+            "gain_fraction_within_variant": 0.0631385513193958
+        },
+        {
+            "variant": "confidence_weighted",
+            "feature": "intersection_density_per_km2",
+            "mean_gain_importance": 24057.635546875,
+            "std_gain_importance": 783.9061800578686,
+            "gain_fraction_within_variant": 0.0607682533053501
+        },
+        {
+            "variant": "confidence_weighted",
+            "feature": "poi_recreation_count",
+            "mean_gain_importance": 24015.9484375,
+            "std_gain_importance": 1498.4920727546528,
+            "gain_fraction_within_variant": 0.0606629539787753
+        },
+        {
+            "variant": "confidence_weighted",
+            "feature": "road_density_km_per_km2",
+            "mean_gain_importance": 23839.00859375,
+            "std_gain_importance": 2172.732515498285,
+            "gain_fraction_within_variant": 0.0602160137454403
+        }
+    ],
+    "important_usage_note": "Use honest_oof_estimate_mbps for model evaluation on observed cells. Use ai_ensemble_estimate_mbps for unlabelled cell estimation. Do not evaluate using the all-model ensemble predictions on labelled cells."
+}

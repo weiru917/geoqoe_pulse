@@ -1,0 +1,103 @@
+{
+    "dataset": "cell_time_dataset.parquet",
+    "data_status": "Ookla-anchored simulated hourly scenario",
+    "task": "Among currently normal anchored cells, rank next-hour degradation onset risk",
+    "training": {
+        "rows": 284946,
+        "positive_onsets": 219,
+        "prevalence": 0.0007685666757912026
+    },
+    "validation": {
+        "rows": 59327,
+        "positive_onsets": 100,
+        "prevalence": 0.0016855731791595731
+    },
+    "test": {
+        "rows": 62119,
+        "positive_onsets": 104,
+        "evaluated": false
+    },
+    "logistic_configuration": {
+        "C": 0.1,
+        "class_weight": "balanced",
+        "solver": "lbfgs",
+        "max_iterations": 2000,
+        "output_interpretation": "risk score, not calibrated probability"
+    },
+    "constant_prevalence": {
+        "ranking_metrics": {
+            "pr_auc": 0.0016855731791595731,
+            "roc_auc": 0.5
+        }
+    },
+    "time_only": {
+        "features": [
+            "hour_of_day",
+            "day_of_week",
+            "is_weekend",
+            "is_peak_period",
+            "ridership_daily_surge_factor"
+        ],
+        "categorical_encoding": "one-hot encoding for hour, day, weekend and peak-period fields",
+        "ranking_metrics": {
+            "pr_auc": 0.009179264725460708,
+            "roc_auc": 0.8891346851942526
+        },
+        "selected_threshold_metrics": {
+            "threshold": 0.788143585011006,
+            "precision": 0.010912931236798873,
+            "recall": 0.93,
+            "f1": 0.021572720946416143,
+            "true_positives": 93,
+            "false_positives": 8429,
+            "true_negatives": 50798,
+            "false_negatives": 7,
+            "predicted_positive_rows": 8522
+        },
+        "training_seconds": 1.0432309000752866,
+        "iterations": 51
+    },
+    "qoe_history_only": {
+        "features": [
+            "dl_median",
+            "ul_median",
+            "rtt_median",
+            "jitter_median",
+            "loss_median",
+            "lag_1h_dl_median",
+            "lag_2h_dl_median",
+            "lag_24h_dl_median",
+            "rolling_mean_24h_dl_median",
+            "rolling_std_24h_dl_median",
+            "lag_1h_rtt_median",
+            "lag_2h_rtt_median",
+            "lag_24h_rtt_median",
+            "rolling_mean_24h_rtt_median",
+            "rolling_std_24h_rtt_median"
+        ],
+        "ranking_metrics": {
+            "pr_auc": 0.031590083201062935,
+            "roc_auc": 0.975164029918787
+        },
+        "selected_threshold_metrics": {
+            "threshold": 0.956699575074922,
+            "precision": 0.03765490943755958,
+            "recall": 0.79,
+            "f1": 0.0718835304822566,
+            "true_positives": 79,
+            "false_positives": 2019,
+            "true_negatives": 57208,
+            "false_negatives": 21,
+            "predicted_positive_rows": 2098
+        },
+        "training_seconds": 2.48755279998295,
+        "iterations": 137
+    },
+    "comparison": {
+        "time_pr_auc_improvement_over_constant": 0.007493691546301135,
+        "qoe_pr_auc_improvement_over_constant": 0.029904510021903363,
+        "qoe_pr_auc_improvement_over_time": 0.022410818475602227,
+        "schedule_warning": false
+    },
+    "test_usage_rule": "The test period remains untouched. It will be evaluated only after the full model and threshold are frozen."
+}

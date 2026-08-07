@@ -1,0 +1,87 @@
+file,column,dtype,pct_non_null,is_feature_for_current_target,is_feature_for_next_hour_target,leakage_risk_note,description,present_in_parquet,initial_review_status
+cell_time_dataset,dl_median,float64,100.0,False,True,,Median simulated download throughput (Mbps) for this cell-hour. NOT a measurement — see config.SIMULATION_DISCLAIMER.,True,review_for_final_registry
+cell_time_dataset,dl_mean,float64,100.0,False,True,,"dl_median x 1.05 (formula-derived, not an independent statistic). Excluded from features when predicting the SAME-HOUR target (leakage); allowed for next-hour prediction.",True,exclude_formula_duplicate
+cell_time_dataset,dl_std,float64,100.0,False,True,,dl_median x 0.15 (formula-derived). Same leakage caveat as dl_mean.,True,exclude_formula_duplicate
+cell_time_dataset,dl_p95,float64,100.0,False,True,,dl_median x 1.30 (formula-derived). Same leakage caveat as dl_mean.,True,exclude_formula_duplicate
+cell_time_dataset,ul_median,float64,100.0,False,True,,"Median simulated upload throughput (Mbps) for this cell-hour. Simulated, see above.",True,review_for_final_registry
+cell_time_dataset,ul_mean,float64,100.0,False,True,,ul_median x 1.05 (formula-derived).,True,exclude_formula_duplicate
+cell_time_dataset,ul_std,float64,100.0,False,True,,ul_median x 0.15 (formula-derived).,True,exclude_formula_duplicate
+cell_time_dataset,rtt_median,float64,100.0,False,True,,"Median simulated round-trip latency (ms) for this cell-hour. Simulated, see above.",True,review_for_final_registry
+cell_time_dataset,rtt_mean,float64,100.0,False,True,,rtt_median x 1.05 (formula-derived).,True,exclude_formula_duplicate
+cell_time_dataset,rtt_std,float64,100.0,False,True,,rtt_median x 0.20 (formula-derived).,True,exclude_formula_duplicate
+cell_time_dataset,jitter_median,float64,100.0,False,True,,"Simulated jitter (ms), derived from rtt_median plus noise.",True,review_for_final_registry
+cell_time_dataset,loss_median,float64,100.0,False,True,,"Simulated packet loss percentage, derived from the same load_factor as dl/rtt.",True,review_for_final_registry
+cell_time_dataset,test_sample_count,int64,100.0,True,True,,"Simulated HOURLY-equivalent test count. For Ookla-anchored cells this is Poisson-sampled around an hourly rate derived from the REAL quarterly total (ookla_quarter_test_count / ~2160 hours, scaled by demand), NOT the quarterly total itself repeated per hour (that was a bug — see CHANGELOG). Represents measurement VOLUME, not the outcome — safe as a feature in either target mode.",True,review_for_final_registry
+cell_time_dataset,unique_device_count,int64,100.0,True,True,,~70% of test_sample_count (rounded). Same status as test_sample_count.,True,review_for_final_registry
+cell_time_dataset,ridership_daily_surge_factor,float64,100.0,True,True,,"Real daily ridership-derived demand multiplier (normalized to the selected week's mean), summed only over Klang-Valley-relevant transit modes (national/inter-city services like ETS, Intercity, Komuter Utara, and Tebrau are excluded). Previously folded silently into the hourly formula with no standalone column; now exported directly so it can be inspected or used as its own feature.",True,review_for_final_registry
+cell_time_dataset,hour_of_day,int32,100.0,True,True,,Undocumented — flag for the Data/GIS lead rather than guessing; do not assume this column is safe to use as-is.,True,review_for_final_registry
+cell_time_dataset,day_of_week,int32,100.0,True,True,,Undocumented — flag for the Data/GIS lead rather than guessing; do not assume this column is safe to use as-is.,True,review_for_final_registry
+cell_time_dataset,is_weekend,int64,100.0,True,True,,Undocumented — flag for the Data/GIS lead rather than guessing; do not assume this column is safe to use as-is.,True,review_for_final_registry
+cell_time_dataset,is_peak_period,int64,100.0,True,True,,Undocumented — flag for the Data/GIS lead rather than guessing; do not assume this column is safe to use as-is.,True,review_for_final_registry
+cell_time_dataset,lag_1h_dl_median,float64,99.4,True,True,,"Value of dl_median exactly 1 hour prior (shift(1), leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_2h_dl_median,float64,98.81,True,True,,"Value of dl_median exactly 2 hours prior (shift(2), leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_24h_dl_median,float64,85.71,True,True,,"Value of dl_median exactly 24 hours prior (shift(24), leakage-free).",True,review_for_final_registry
+cell_time_dataset,rolling_mean_24h_dl_median,float64,99.4,True,True,,"Trailing rolling mean of 24h_dl_median, computed after shift(1) (leakage-free).",True,review_for_final_registry
+cell_time_dataset,rolling_std_24h_dl_median,float64,100.0,True,True,,"Trailing rolling standard deviation of 24h_dl_median, computed after shift(1) (leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_1h_dl_median_valid,int64,100.0,True,True,,"Value of dl_median_valid exactly 1 hour prior (shift(1), leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_2h_dl_median_valid,int64,100.0,True,True,,"Value of dl_median_valid exactly 2 hours prior (shift(2), leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_24h_dl_median_valid,int64,100.0,True,True,,"Value of dl_median_valid exactly 24 hours prior (shift(24), leakage-free).",True,review_for_final_registry
+cell_time_dataset,rolling_mean_24h_dl_median_valid,int64,100.0,True,True,,"Trailing rolling mean of 24h_dl_median_valid, computed after shift(1) (leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_1h_rtt_median,float64,99.4,True,True,,"Value of rtt_median exactly 1 hour prior (shift(1), leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_2h_rtt_median,float64,98.81,True,True,,"Value of rtt_median exactly 2 hours prior (shift(2), leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_24h_rtt_median,float64,85.71,True,True,,"Value of rtt_median exactly 24 hours prior (shift(24), leakage-free).",True,review_for_final_registry
+cell_time_dataset,rolling_mean_24h_rtt_median,float64,99.4,True,True,,"Trailing rolling mean of 24h_rtt_median, computed after shift(1) (leakage-free).",True,review_for_final_registry
+cell_time_dataset,rolling_std_24h_rtt_median,float64,100.0,True,True,,"Trailing rolling standard deviation of 24h_rtt_median, computed after shift(1) (leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_1h_rtt_median_valid,int64,100.0,True,True,,"Value of rtt_median_valid exactly 1 hour prior (shift(1), leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_2h_rtt_median_valid,int64,100.0,True,True,,"Value of rtt_median_valid exactly 2 hours prior (shift(2), leakage-free).",True,review_for_final_registry
+cell_time_dataset,lag_24h_rtt_median_valid,int64,100.0,True,True,,"Value of rtt_median_valid exactly 24 hours prior (shift(24), leakage-free).",True,review_for_final_registry
+cell_time_dataset,rolling_mean_24h_rtt_median_valid,int64,100.0,True,True,,"Trailing rolling mean of 24h_rtt_median_valid, computed after shift(1) (leakage-free).",True,review_for_final_registry
+cell_time_dataset,qoe_trend_1h,float64,99.4,True,True,,Undocumented — flag for the Data/GIS lead rather than guessing; do not assume this column is safe to use as-is.,True,review_for_final_registry
+cell_time_dataset,in_warmup_window,int64,100.0,True,True,,Undocumented — flag for the Data/GIS lead rather than guessing; do not assume this column is safe to use as-is.,True,exclude_target_id_or_control
+cell_time_dataset,tower_count,int64,100.0,True,True,,"Deduplicated approximate PHYSICAL SITE count (OpenCellID records collapsed by ~11m coordinate rounding) — see opencellid_record_count for the raw, non-deduplicated record count.",True,review_for_final_registry
+cell_time_dataset,opencellid_record_count,int64,100.0,True,True,,Raw OpenCellID record count per cell BEFORE deduplication — includes multiple sectors/technologies/operators at the same physical site. Use tower_count for a physical-site estimate.,True,review_for_final_registry
+cell_time_dataset,tower_density_per_km2,float64,100.0,True,True,,Undocumented — flag for the Data/GIS lead rather than guessing; do not assume this column is safe to use as-is.,True,review_for_final_registry
+cell_time_dataset,dist_to_nearest_tower_m,float64,100.0,True,True,,"Real geometric nearest-neighbor distance (sjoin_nearest, projected CRS) from the cell centroid to the nearest deduplicated OpenCellID site.",True,review_for_final_registry
+cell_time_dataset,tower_is_synthetic,bool,100.0,True,True,,True if tower used a synthetic fallback (raw source file missing).,True,exclude_provenance_or_ookla_status
+cell_time_dataset,building_count,int64,100.0,True,True,,Real Google Open Buildings V3 footprint count per cell (confidence >= 0.65 only).,True,review_for_final_registry
+cell_time_dataset,total_building_area_m2,float64,100.0,True,True,,Real summed footprint area (m^2) per cell.,True,review_for_final_registry
+cell_time_dataset,built_up_ratio,float64,100.0,True,True,,"Real building footprint area / real H3 cell area (both from GIS geometry, not a hardcoded constant).",True,review_for_final_registry
+cell_time_dataset,building_density_per_km2,float64,100.0,True,True,,building_count / real cell area (km^2).,True,review_for_final_registry
+cell_time_dataset,avg_building_footprint_m2,float64,100.0,True,True,,total_building_area_m2 / building_count.,True,review_for_final_registry
+cell_time_dataset,building_is_synthetic,bool,100.0,True,True,,True if building used a synthetic fallback (raw source file missing).,True,exclude_provenance_or_ookla_status
+cell_time_dataset,poi_education_count,int64,100.0,True,True,,"Real OSM POI count: schools, universities, colleges, kindergartens.",True,review_for_final_registry
+cell_time_dataset,poi_healthcare_count,int64,100.0,True,True,,"Real OSM POI count: hospitals, clinics, pharmacies, doctors.",True,review_for_final_registry
+cell_time_dataset,poi_retail_food_count,int64,100.0,True,True,,"Real OSM POI count: restaurants, cafes, fast food, shops.",True,review_for_final_registry
+cell_time_dataset,poi_office_count,int64,100.0,True,True,,Real OSM POI count: tagged office=*.,True,review_for_final_registry
+cell_time_dataset,poi_recreation_count,int64,100.0,True,True,,Real OSM POI count: leisure=* or tourism=*.,True,review_for_final_registry
+cell_time_dataset,road_length_m,float64,100.0,True,True,,Real road length (m) per cell via polygon overlay in a projected CRS (not a heuristic).,True,review_for_final_registry
+cell_time_dataset,road_density_km_per_km2,float64,100.0,True,True,,road_length_m / 1000 / real cell area (km^2).,True,review_for_final_registry
+cell_time_dataset,intersection_count,int64,100.0,True,True,,Real OSM road-network node count per cell.,True,review_for_final_registry
+cell_time_dataset,intersection_density_per_km2,float64,100.0,True,True,,intersection_count / real cell area (km^2).,True,review_for_final_registry
+cell_time_dataset,dist_to_nearest_transit_m,float64,100.0,True,True,,"Real geometric nearest-neighbor distance to the nearest OSM transit/rail POI (sjoin_nearest, projected CRS).",True,review_for_final_registry
+cell_time_dataset,poi_transport_stop_count,int64,100.0,True,True,,Real OSM POI count of public-transport/rail stops joined into the cell.,True,review_for_final_registry
+cell_time_dataset,osm_is_synthetic,bool,100.0,True,True,,True if osm used a synthetic fallback (raw source file missing).,True,exclude_provenance_or_ookla_status
+cell_time_dataset,population_night,float64,100.0,True,True,,Real WorldPop 2020 zonal-statistics residential population estimate for the cell.,True,review_for_final_registry
+cell_time_dataset,population_density_per_km2,float64,100.0,True,True,,"population_night / real cell area (km^2, projected CRS).",True,review_for_final_registry
+cell_time_dataset,population_day,float64,100.0,True,True,,"Modelled daytime population (residential population reweighted by real OSM office/retail density) — explicitly an assumption, not a raster.",True,review_for_final_registry
+cell_time_dataset,population_is_synthetic,bool,100.0,True,True,,True if population used a synthetic fallback (raw source file missing).,True,exclude_provenance_or_ookla_status
+cell_time_dataset,demand_pressure_base,float64,100.0,True,True,,"0-100 composite of ONLY real static features (population, POI, built-up, roads/transport). Zero QoE dependency — safe to use with any target, any mode.",True,review_for_final_registry
+cell_time_dataset,demand_pressure_index_pre_spatial,float64,100.0,True,True,"Same circularity as demand_pressure_index, pre-spatial-smoothing.","demand_pressure_base plus a historical-QoE component. Same circularity as demand_pressure_index, pre-spatial-smoothing.",True,exclude_circular_demand_index
+cell_time_dataset,spatial_lag_dl_median,float64,100.0,False,True,,Row-standardized H3 1-ring neighbor average of dl_median at the same timestamp (real libpysal weights).,True,review_for_final_registry
+cell_time_dataset,spatial_var_dl_median,float64,100.0,True,True,,Row-standardized H3 1-ring neighbor variance of dl_median at the same timestamp (real libpysal weights).,True,review_for_final_registry
+cell_time_dataset,spatial_lag_rtt_median,float64,100.0,False,True,,Row-standardized H3 1-ring neighbor average of rtt_median at the same timestamp (real libpysal weights).,True,review_for_final_registry
+cell_time_dataset,spatial_var_rtt_median,float64,100.0,True,True,,Row-standardized H3 1-ring neighbor variance of rtt_median at the same timestamp (real libpysal weights).,True,review_for_final_registry
+cell_time_dataset,spatial_lag_population_night,float64,100.0,True,True,,Row-standardized H3 1-ring neighbor average of population_night at the same timestamp (real libpysal weights).,True,review_for_final_registry
+cell_time_dataset,spatial_var_population_night,float64,100.0,True,True,,Row-standardized H3 1-ring neighbor variance of population_night at the same timestamp (real libpysal weights).,True,review_for_final_registry
+cell_time_dataset,spatial_lag_demand_pressure_index_pre_spatial,float64,100.0,True,True,,Row-standardized H3 1-ring neighbor average of demand_pressure_index_pre_spatial at the same timestamp (real libpysal weights).,True,exclude_circular_demand_index
+cell_time_dataset,spatial_var_demand_pressure_index_pre_spatial,float64,100.0,True,True,,Row-standardized H3 1-ring neighbor variance of demand_pressure_index_pre_spatial at the same timestamp (real libpysal weights).,True,exclude_circular_demand_index
+cell_time_dataset,demand_pressure_index,float64,100.0,True,True,"Circular with the simulated QoE generator via its historical_qoe component (lag_24h_rtt_median). Use demand_pressure_base instead for a non-circular, real-data-only feature.","Final spatially-smoothed demand pressure index. Circular with the simulated QoE generator via its historical_qoe component (lag_24h_rtt_median). Use demand_pressure_base instead for a non-circular, real-data-only feature.",True,exclude_circular_demand_index
+cell_time_dataset,spatial_rolling_mean_24h_dl_median,float64,100.0,True,True,,Undocumented — flag for the Data/GIS lead rather than guessing; do not assume this column is safe to use as-is.,True,review_for_final_registry
+cell_time_dataset,gi_star_zscore_rtt_median,float64,100.0,True,True,,"Real Getis-Ord Gi* z-score for latency (esda.G_Local, star=True) — the full Gi* expectation/variance formulation, not a plain standardized neighbor average.",True,review_for_final_registry
+cell_time_dataset,gi_star_pvalue_rtt_median,float32,100.0,True,True,,Permutation-based p-value (99 permutations) for the Getis-Ord Gi* statistic on rtt_median.,True,review_for_final_registry
+cell_time_dataset,local_moran_i_rtt_median,float64,100.0,True,True,,Local Moran's I statistic value for rtt_median (real esda.Moran_Local).,True,review_for_final_registry
+cell_time_dataset,local_moran_pvalue_rtt_median,float64,100.0,True,True,,Permutation-based p-value (99 permutations) for Local Moran's I on rtt_median.,True,review_for_final_registry
+cell_time_dataset,historical_hotspot_freq_rtt_median,float64,100.0,True,True,,"Rolling (shift(1)-based, leakage-free) fraction of past hours this cell was a real (esda-confirmed) hotspot.",True,review_for_final_registry
+cell_time_dataset,hotspot_category_rtt_median_encoded,int64,100.0,True,True,,"Ordinal-encoded hotspot confidence band (0=cold_99, 1=cold_95, 2=cold_90, 3=not_significant, 4=hot_90, 5=hot_95, 6=hot_99). ML-compatible integer version of hotspot_category_rtt_median (string, kept for dashboard).",True,review_for_final_registry
+cell_time_dataset,local_moran_quadrant_rtt_median_encoded,int64,100.0,True,True,,"Ordinal-encoded Local Moran's I spatial cluster/outlier class (0=not_significant, 1=LL, 2=LH, 3=HL, 4=HH). ML-compatible integer version of local_moran_quadrant_rtt_median (string, kept for dashboard).",True,review_for_final_registry
+cell_time_dataset,qoe_confidence_score,float64,100.0,True,True,,"min(1.0, test_sample_count / 10) — higher sample count = more confidence in the cell-hour's QoE estimate.",True,review_for_final_registry

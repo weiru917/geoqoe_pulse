@@ -1,0 +1,11 @@
+model,cutoff,k_rows,captured_onsets,total_validation_onsets,recall_at_k,precision_at_k
+time_only,top_20,20,0,100,0.0,0.0
+time_only,top_50,50,0,100,0.0,0.0
+time_only,top_100,100,0,100,0.0,0.0
+time_only,top_1_percent,594,1,100,0.01,0.0016835016835016834
+time_only,top_5_percent,2967,5,100,0.05,0.0016852039096730705
+qoe_history_only,top_20,20,0,100,0.0,0.0
+qoe_history_only,top_50,50,0,100,0.0,0.0
+qoe_history_only,top_100,100,1,100,0.01,0.01
+qoe_history_only,top_1_percent,594,18,100,0.18,0.030303030303030304
+qoe_history_only,top_5_percent,2967,93,100,0.93,0.03134479271991911

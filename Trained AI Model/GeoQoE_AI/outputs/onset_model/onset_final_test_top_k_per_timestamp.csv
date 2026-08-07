@@ -1,0 +1,16 @@
+model,cutoff,alerts_issued,captured_onsets,total_test_onsets,recall,precision,timestamps_with_onset,timestamps_with_captured_onset
+time_only_xgboost,top_20_per_hour,440,1,104,0.009615384615384616,0.0022727272727272726,7,1
+time_only_xgboost,top_50_per_hour,1100,4,104,0.038461538461538464,0.0036363636363636364,7,4
+time_only_xgboost,top_100_per_hour,2200,8,104,0.07692307692307693,0.0036363636363636364,7,4
+time_only_xgboost,top_1_percent_per_hour,631,1,104,0.009615384615384616,0.001584786053882726,7,1
+time_only_xgboost,top_5_percent_per_hour,3116,8,104,0.07692307692307693,0.0025673940949935813,7,4
+qoe_history_xgboost,top_20_per_hour,440,45,104,0.4326923076923077,0.10227272727272728,7,4
+qoe_history_xgboost,top_50_per_hour,1100,104,104,1.0,0.09454545454545454,7,7
+qoe_history_xgboost,top_100_per_hour,2200,104,104,1.0,0.04727272727272727,7,7
+qoe_history_xgboost,top_1_percent_per_hour,631,65,104,0.625,0.10301109350237718,7,5
+qoe_history_xgboost,top_5_percent_per_hour,3116,104,104,1.0,0.03337612323491656,7,7
+full_causal_xgboost,top_20_per_hour,440,46,104,0.4423076923076923,0.10454545454545454,7,7
+full_causal_xgboost,top_50_per_hour,1100,103,104,0.9903846153846154,0.09363636363636364,7,7
+full_causal_xgboost,top_100_per_hour,2200,104,104,1.0,0.04727272727272727,7,7
+full_causal_xgboost,top_1_percent_per_hour,631,66,104,0.6346153846153846,0.1045958795562599,7,7
+full_causal_xgboost,top_5_percent_per_hour,3116,104,104,1.0,0.03337612323491656,7,7

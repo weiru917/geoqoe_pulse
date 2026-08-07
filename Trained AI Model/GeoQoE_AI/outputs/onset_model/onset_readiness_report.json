@@ -1,0 +1,24 @@
+{
+    "dataset": "cell_time_dataset.parquet",
+    "data_status": "Ookla-anchored simulated hourly scenario",
+    "task": "Among anchored cells currently normal, predict degradation onset in the next hour",
+    "candidate_rows": 406392,
+    "positive_onsets": 423,
+    "positive_rate": 0.0010408669461997283,
+    "temporal_split": {
+        "usable_timestamps": 143,
+        "training_timestamps": 100,
+        "validation_timestamps": 21,
+        "test_timestamps": 22
+    },
+    "split_positive_events": {
+        "train": 219,
+        "validation": 100,
+        "test": 104
+    },
+    "dictionary_approved_candidates": 86,
+    "dictionary_candidates_for_review": 70,
+    "top_two_onset_hour_share": 0.8203309692671394,
+    "readiness_passed": true,
+    "important_limitation": "The hourly panel and onset labels are simulated. The test period evaluates generalisation within the simulation, not performance on observed hourly telecom telemetry."
+}

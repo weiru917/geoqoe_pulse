@@ -1,0 +1,48 @@
+{
+    "time_only_xgboost": {
+        "threshold": 0.6531141996383667,
+        "selected_using": "validation maximum F1",
+        "validation_metrics": {
+            "threshold": 0.6531141996383667,
+            "precision": 0.01620288834096513,
+            "recall": 0.92,
+            "f1": 0.031844929041190725,
+            "true_positives": 92,
+            "false_positives": 5586,
+            "true_negatives": 53641,
+            "false_negatives": 8,
+            "predicted_positive_rows": 5678
+        }
+    },
+    "qoe_history_xgboost": {
+        "threshold": 0.10680153965950012,
+        "selected_using": "validation maximum F1",
+        "validation_metrics": {
+            "threshold": 0.10680153965950012,
+            "precision": 0.13053613053613053,
+            "recall": 0.56,
+            "f1": 0.21172022684310018,
+            "true_positives": 56,
+            "false_positives": 373,
+            "true_negatives": 58854,
+            "false_negatives": 44,
+            "predicted_positive_rows": 429
+        }
+    },
+    "full_causal_xgboost": {
+        "threshold": 0.4476921260356903,
+        "selected_using": "validation maximum F1",
+        "validation_metrics": {
+            "threshold": 0.4476921260356903,
+            "precision": 0.14457831325301204,
+            "recall": 0.6,
+            "f1": 0.23300970873786409,
+            "true_positives": 60,
+            "false_positives": 355,
+            "true_negatives": 58872,
+            "false_negatives": 40,
+            "predicted_positive_rows": 415
+        }
+    },
+    "test_usage": "No test score or metric was calculated"
+}

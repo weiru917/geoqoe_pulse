@@ -1,0 +1,83 @@
+{
+    "dataset": "cell_static_qoe_baseline.parquet",
+    "data_status": "real quarterly Ookla targets",
+    "target": "ookla_dl_mbps",
+    "number_of_labelled_cells": 2950,
+    "number_of_spatial_groups": 113,
+    "number_of_features": 16,
+    "features": [
+        "tower_density_per_km2",
+        "dist_to_nearest_tower_m",
+        "building_density_per_km2",
+        "built_up_ratio",
+        "avg_building_footprint_m2",
+        "poi_education_count",
+        "poi_healthcare_count",
+        "poi_retail_food_count",
+        "poi_office_count",
+        "poi_recreation_count",
+        "poi_transport_stop_count",
+        "road_density_km_per_km2",
+        "intersection_density_per_km2",
+        "dist_to_nearest_transit_m",
+        "population_density_per_km2",
+        "population_day"
+    ],
+    "cross_validation": "5-fold GroupKFold by h3_parent_res6",
+    "xgboost_parameters": {
+        "n_estimators": 400,
+        "max_depth": 4,
+        "learning_rate": 0.03,
+        "min_child_weight": 10,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "reg_alpha": 0.5,
+        "reg_lambda": 5.0,
+        "objective": "reg:squarederror",
+        "eval_metric": "mae",
+        "tree_method": "hist",
+        "importance_type": "gain",
+        "random_state": 42,
+        "n_jobs": -1
+    },
+    "confidence_weighting": {
+        "used_as_feature": false,
+        "weight_formula": "sqrt(ookla_tests), capped at the training-fold 95th percentile and normalised to mean 1"
+    },
+    "baseline_results": {
+        "median_dummy": {
+            "mae_mbps": 86.03360722188374,
+            "rmse_mbps": 117.77829854310636,
+            "r2": -0.006517997968650713,
+            "spearman_correlation": -0.016839083213839152
+        },
+        "ridge": {
+            "mae_mbps": 83.56222135541067,
+            "rmse_mbps": 116.07719745287257,
+            "r2": 0.022346811612326656,
+            "spearman_correlation": 0.274510408994097
+        }
+    },
+    "xgboost_results": {
+        "unweighted": {
+            "mae_mbps": 83.86586697871655,
+            "rmse_mbps": 118.41803048208564,
+            "r2": -0.0174818272446704,
+            "spearman_correlation": 0.18936453494392433
+        },
+        "confidence_weighted": {
+            "mae_mbps": 82.29671184639052,
+            "rmse_mbps": 116.17850945291806,
+            "r2": 0.020639476160167147,
+            "spearman_correlation": 0.23567407305944937
+        }
+    },
+    "candidate_oof_mae_mbps": {
+        "median_dummy": 86.03360722188374,
+        "ridge": 83.56222135541067,
+        "xgboost_unweighted": 83.86586697871655,
+        "xgboost_confidence_weighted": 82.29671184639052
+    },
+    "provisional_lowest_mae_model": "xgboost_confidence_weighted",
+    "total_training_seconds": 14.26109980000183
+}

@@ -1,0 +1,32 @@
+{
+    "selected_using": "validation split only",
+    "time_only": {
+        "threshold": 0.788143585011006,
+        "validation_metrics": {
+            "threshold": 0.788143585011006,
+            "precision": 0.010912931236798873,
+            "recall": 0.93,
+            "f1": 0.021572720946416143,
+            "true_positives": 93,
+            "false_positives": 8429,
+            "true_negatives": 50798,
+            "false_negatives": 7,
+            "predicted_positive_rows": 8522
+        }
+    },
+    "qoe_history_only": {
+        "threshold": 0.956699575074922,
+        "validation_metrics": {
+            "threshold": 0.956699575074922,
+            "precision": 0.03765490943755958,
+            "recall": 0.79,
+            "f1": 0.0718835304822566,
+            "true_positives": 79,
+            "false_positives": 2019,
+            "true_negatives": 57208,
+            "false_negatives": 21,
+            "predicted_positive_rows": 2098
+        }
+    },
+    "test_usage": "No test prediction or metric was calculated"
+}

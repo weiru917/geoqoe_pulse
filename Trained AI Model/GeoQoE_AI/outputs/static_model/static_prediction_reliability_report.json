@@ -1,0 +1,67 @@
+{
+    "purpose": "Reliability audit for static spatial QoE estimates",
+    "total_cells": 4918,
+    "observed_ookla_cells": 2950,
+    "ai_estimated_cells": 1968,
+    "feature_space_support": {
+        "interpretation": "Distance in standardized GIS feature space to the nearest real-labelled reference cell",
+        "labelled_distance_95th_percentile": 2.503002398045368,
+        "labelled_distance_99th_percentile": 4.604713562854804,
+        "unlabelled_support_counts": {
+            "within_reference": 1869,
+            "limited_reference": 85,
+            "outside_reference": 14
+        }
+    },
+    "relative_reliability": {
+        "interpretation": "Combines feature-space support and ensemble model disagreement; not a calibrated accuracy probability or confidence interval",
+        "unlabelled_counts": {
+            "lower": 668,
+            "moderate": 667,
+            "higher": 633
+        }
+    },
+    "coverage_bias_diagnostic": {
+        "target": "has_real_ookla_label",
+        "used_as_qoe_feature": false,
+        "cross_validation": "5-fold StratifiedGroupKFold by h3_parent_res6",
+        "labelled_prevalence": 0.5998373322488817,
+        "roc_auc": 0.9761480294887694,
+        "pr_auc": 0.9852172141407458,
+        "interpretation": "strong"
+    },
+    "distributions": {
+        "observed_ookla_dl_mbps": {
+            "count": 2950.0,
+            "mean": 184.38283162396812,
+            "std": 117.41622819414721,
+            "min": 0.115,
+            "25%": 107.79647794117646,
+            "50%": 175.08659190809192,
+            "75%": 239.97029999999998,
+            "max": 918.639
+        },
+        "honest_oof_estimate_mbps": {
+            "count": 2950.0,
+            "mean": 181.35406512632207,
+            "std": 37.27963327308408,
+            "min": 29.109821319580078,
+            "25%": 167.7735481262207,
+            "50%": 189.24595642089844,
+            "75%": 205.2884178161621,
+            "max": 291.56396484375
+        },
+        "unlabelled_ai_estimate_mbps": {
+            "count": 1968.0,
+            "mean": 82.76053994031457,
+            "std": 36.08267519263815,
+            "min": 39.67817153930664,
+            "25%": 61.14194221496582,
+            "50%": 62.14110412597656,
+            "75%": 99.9668685913086,
+            "max": 231.37990112304686
+        },
+        "unlabelled_to_observed_mean_ratio": 0.4488516594055628
+    },
+    "usage_note": "Relative reliability indicates model support, not guaranteed prediction correctness. Cells marked lower reliability should be shown with a warning or reduced visual confidence."
+}

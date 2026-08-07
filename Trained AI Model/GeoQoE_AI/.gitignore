@@ -1,0 +1,30 @@
+# Python virtual environment
+.venv/
+venv/
+
+# Python temporary/cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# PyCharm settings
+.idea/
+
+# Jupyter temporary files
+.ipynb_checkpoints/
+
+# Windows/macOS junk
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.tmp
+*.log
+
+# Microsoft Office temporary files
+~$*
+
+# Large training/development datasets excluded from repository
+data/development/cell_time_dataset_development.parquet
+data/development/forecast_dataset_development.parquet
+data/pipeline_v3_2/cell_time_dataset.parquet
