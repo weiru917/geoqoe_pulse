@@ -14,3 +14,6 @@ pyproj>=3.6.0
 rtree>=1.0.0
 scipy>=1.11.0
 pyrosm>=0.13.0
+plotly>=5.20
+pydeck>=0.9
+streamlit>=1.35

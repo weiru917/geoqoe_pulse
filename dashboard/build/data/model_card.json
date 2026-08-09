@@ -1,0 +1,128 @@
+{
+  "project": "GeoQoE Pulse",
+  "package_status": "competition prototype",
+  "recommended_pitch_wording": "GeoQoE Pulse combines a real-data spatial QoE baseline with a transparently simulated next-hour onset-ranking workflow. The system highlights observed, AI-estimated and simulated outputs separately and exposes model-support indicators.",
+  "limitations": [
+    "Hourly QoE and onset labels are simulated. Forecast metrics do not validate performance on observed hourly telecom telemetry.",
+    "The static model has low spatial out-of-fold R-squared and should be treated as a rough estimator.",
+    "Ookla-labelled and unlabelled cells have strongly different GIS coverage patterns.",
+    "Model disagreement and reliability categories are relative support indicators, not calibrated confidence probabilities.",
+    "Test results were evaluated once and were not used to change the selected model or threshold."
+  ],
+  "static_model": {
+    "selected_model": "confidence_weighted XGBoost",
+    "purpose": "Estimate a static spatial QoE baseline for cells without direct Ookla labels",
+    "observed_cells": 2950,
+    "ai_estimated_cells": 1968,
+    "spatial_oof_mae_mbps": 82.2967118871546,
+    "spatial_oof_rmse_mbps": 116.17850958998605,
+    "spatial_oof_r2": 0.02063947613845274,
+    "usage": "Use as a rough spatial baseline and blind-spot estimate, not as a direct measurement or precise guaranteed Mbps value."
+  },
+  "onset_model": {
+    "selected_model": "full_causal_xgboost",
+    "purpose": "Rank currently normal anchored cells by next-hour degradation-onset risk",
+    "feature_count": 41,
+    "frozen_best_iteration": 18,
+    "frozen_validation_threshold": 0.4476921260356903,
+    "selection_basis": "Highest validation PR-AUC before final-test evaluation",
+    "validation": {
+      "pr_auc": 0.12157776880798943,
+      "roc_auc": 0.9783267766390329,
+      "precision": 0.14457831325301204,
+      "recall": 0.6,
+      "f1": 0.23300970873786409,
+      "true_positives": 60,
+      "false_positives": 355,
+      "true_negatives": 58872,
+      "false_negatives": 40,
+      "predicted_positive_rows": 415
+    },
+    "final_test": {
+      "pr_auc": 0.16098162347460598,
+      "roc_auc": 0.9955388429598298,
+      "precision": 0.12545676004872108,
+      "recall": 0.9903846153846154,
+      "f1": 0.2227027027027027,
+      "true_positives": 103,
+      "false_positives": 718,
+      "true_negatives": 61297,
+      "false_negatives": 1,
+      "predicted_positive_rows": 821
+    },
+    "final_test_top_k": [
+      {
+        "model": "full_causal_xgboost",
+        "cutoff": "top_20_per_hour",
+        "alerts_issued": 440,
+        "captured_onsets": 46,
+        "total_test_onsets": 104,
+        "recall": 0.4423076923076923,
+        "precision": 0.10454545454545454,
+        "timestamps_with_onset": 7,
+        "timestamps_with_captured_onset": 7
+      },
+      {
+        "model": "full_causal_xgboost",
+        "cutoff": "top_50_per_hour",
+        "alerts_issued": 1100,
+        "captured_onsets": 103,
+        "total_test_onsets": 104,
+        "recall": 0.9903846153846154,
+        "precision": 0.09363636363636364,
+        "timestamps_with_onset": 7,
+        "timestamps_with_captured_onset": 7
+      },
+      {
+        "model": "full_causal_xgboost",
+        "cutoff": "top_100_per_hour",
+        "alerts_issued": 2200,
+        "captured_onsets": 104,
+        "total_test_onsets": 104,
+        "recall": 1.0,
+        "precision": 0.04727272727272727,
+        "timestamps_with_onset": 7,
+        "timestamps_with_captured_onset": 7
+      },
+      {
+        "model": "full_causal_xgboost",
+        "cutoff": "top_1_percent_per_hour",
+        "alerts_issued": 631,
+        "captured_onsets": 66,
+        "total_test_onsets": 104,
+        "recall": 0.6346153846153846,
+        "precision": 0.1045958795562599,
+        "timestamps_with_onset": 7,
+        "timestamps_with_captured_onset": 7
+      },
+      {
+        "model": "full_causal_xgboost",
+        "cutoff": "top_5_percent_per_hour",
+        "alerts_issued": 3116,
+        "captured_onsets": 104,
+        "total_test_onsets": 104,
+        "recall": 1.0,
+        "precision": 0.03337612323491656,
+        "timestamps_with_onset": 7,
+        "timestamps_with_captured_onset": 7
+      }
+    ],
+    "important_observation": "Current and lagged QoE features dominate the model. GIS and demand context produced a modest validation improvement, but the QoE-history-only model achieved a higher PR-AUC on the final test period.",
+    "score_interpretation": "Relative onset-risk score, not a calibrated probability"
+  },
+  "dashboard_snapshot": {
+    "timestamp": "2026-06-30 23:00:00",
+    "total_cells": 4918,
+    "eligible_scored_cells": 2843,
+    "frozen_threshold_alerts": 44
+  },
+  "package_manifest_files": [
+    "dashboard/latest_hour_onset_risk.csv",
+    "dashboard/latest_hour_onset_risk.parquet",
+    "dashboard/latest_hour_ranked_eligible_cells.csv",
+    "metadata/geoqoe_model_card.json",
+    "metadata/geoqoe_onset_feature_registry.json",
+    "models/geoqoe_onset_full_causal_xgboost.json",
+    "README.txt"
+  ]
+}

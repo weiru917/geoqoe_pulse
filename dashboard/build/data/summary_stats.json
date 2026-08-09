@@ -1,0 +1,57 @@
+{
+  "study_area": "Klang Valley core: Kuala Lumpur federal territory, Putrajaya federal territory, and 6 urbanised Selangor districts (Gombak, Hulu Langat, Klang, Kuala Langat, Petaling, Sepang). Deliberately excludes rural/exurban Selangor (Sabak Bernam, Hulu Selangor, etc.).",
+  "pipeline_version": "3.2.0",
+  "generated_at_utc": "2026-08-04T21:18:12.999594+00:00",
+  "h3_resolution": 8,
+  "total_cells": 4918,
+  "total_timestamps": 168,
+  "time_range": {
+    "start": 1782259200000,
+    "end": 1782860400000
+  },
+  "synthetic_pct_by_source": {
+    "tower": 0.0,
+    "building": 0.0,
+    "osm": 0.0,
+    "population": 0.0
+  },
+  "ookla_anchored_pct": 60.0,
+  "source_datasets": {
+    "ookla": true,
+    "buildings": true,
+    "towers": true,
+    "osm": true,
+    "worldpop": true,
+    "dosm_population": true,
+    "ridership": true
+  },
+  "qoe_thresholds": {
+    "dl_degraded_mbps": 10.0,
+    "rtt_degraded_ms": 100.0,
+    "dl_severe_mbps": 5.0,
+    "rtt_severe_ms": 150.0
+  },
+  "qoe_formula": {
+    "source": "src/data_preprocessing/qoe_target.py:compute_qoe_targets()",
+    "weights_balanced": {
+      "download": 0.6,
+      "upload": 0.4,
+      "rtt_penalty": 0.4,
+      "loss_penalty": 0.4
+    },
+    "dl_log_saturation_mbps": 50.0,
+    "ul_log_saturation_mbps": 20.0,
+    "rtt_penalty_free_ms": 20.0,
+    "rtt_penalty_scale_ms": 50.0,
+    "loss_penalty_scale_pct": 3.0,
+    "note": "qoe_index = w_dl*min(100, log1p(dl)/log1p(50)*100) + w_ul*min(100, log1p(ul)/log1p(20)*100) - w_rtt*100*(1-exp(-max(0,rtt-20)/50)) - w_loss*100*(1-exp(-max(0,loss)/3)), clipped to [0,100]. This is a custom composite index inspired by Weber-Fechner perceptual scaling, NOT a validated ITU-T G.107 E-model \u2014 see qoe_target.py's own docstring."
+  },
+  "demand_elasticity": {
+    "source": "src/data_preprocessing/data_downloader.py:build_dynamic_panel()",
+    "anchored_dl_sensitivity": 0.3,
+    "anchored_rtt_sensitivity": 0.15,
+    "unanchored_dl_sensitivity": 0.8,
+    "unanchored_rtt_sensitivity": 0.9
+  },
+  "disclaimer": "The hourly QoE panel (cell_time_dataset) is a simulated diurnal-demand scenario built on top of 100% real static GIS features (towers, buildings, roads, POIs, population) \u2014 it is a software-integration and dashboard-demo fixture, not observed network measurements. 60.0% of cells have their simulated values re-centred on a real quarterly Ookla average; the rest are simulated-only. See cell_static_qoe_baseline.parquet for the zero-synthetic-QoE real Ookla baseline."
+}

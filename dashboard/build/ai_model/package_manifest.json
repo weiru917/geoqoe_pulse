@@ -1,0 +1,43 @@
+{
+    "project": "GeoQoE Pulse",
+    "package_type": "frozen competition AI package",
+    "selected_onset_model": "full_causal_xgboost",
+    "latest_dashboard_timestamp": "2026-06-30 23:00:00",
+    "files": [
+        {
+            "path": "dashboard/latest_hour_onset_risk.csv",
+            "size_bytes": 2848081,
+            "sha256": "f4ec92c4e2a1d9cb79548c8cccdc42851ab061d4a26ccd59c4bb6f2960fb9c53"
+        },
+        {
+            "path": "dashboard/latest_hour_onset_risk.parquet",
+            "size_bytes": 531897,
+            "sha256": "be1c6af8c2f4c451d8b5e0260e436355267e28e39fa4815a3477ca27ceb1fc18"
+        },
+        {
+            "path": "dashboard/latest_hour_ranked_eligible_cells.csv",
+            "size_bytes": 1711408,
+            "sha256": "a33162b585a9b87aef7962a06d0accdff6db93cd0441baa83d0e141588a68f52"
+        },
+        {
+            "path": "metadata/geoqoe_model_card.json",
+            "size_bytes": 11835,
+            "sha256": "6c1ad9bb88fb662d48b063d9e66a288b0382cb11dc697f1a5816bba0b3e55b3f"
+        },
+        {
+            "path": "metadata/geoqoe_onset_feature_registry.json",
+            "size_bytes": 5165,
+            "sha256": "447e6730c081b9ab2a9fc2d1cc3c480a7c140cd6afa3bf86f27b48830c432561"
+        },
+        {
+            "path": "models/geoqoe_onset_full_causal_xgboost.json",
+            "size_bytes": 62628,
+            "sha256": "1f8dc35d1f900df66325f2768e79edb5a8f6fcdbe5d872643ee4b7c15c3ca333"
+        },
+        {
+            "path": "README.txt",
+            "size_bytes": 1657,
+            "sha256": "e198404a46d0a197beeef348cc79ac6a7be9a7065866ee988009bdbf336535b1"
+        }
+    ]
+}
