@@ -1,0 +1,178 @@
+{
+  "purpose": "Provenance record of every source actually used, including files deleted after extraction.",
+  "ookla_quarterly": {
+    "quarters_ingested": 14,
+    "span": "2023Q1 to 2026Q2",
+    "total_real_speed_tests": 3959197,
+    "distinct_cells_ever_covered": 3566,
+    "raw_files_retained": false,
+    "why_deleted": "~2.75 GB of raw tiles for a few hundred KB of per-cell extract. Deterministic and re-fetchable from the URLs below.",
+    "extract_retained_at": "data/processed/ookla_quarterly_by_h3.parquet",
+    "quarters": [
+      {
+        "quarter": "2023Q1",
+        "cells_covered": 2945,
+        "ookla_tiles": 5854,
+        "real_speed_tests": 309844,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2023/quarter=1/2023-01-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2023Q2",
+        "cells_covered": 2916,
+        "ookla_tiles": 5761,
+        "real_speed_tests": 273286,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2023/quarter=2/2023-04-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2023Q3",
+        "cells_covered": 2976,
+        "ookla_tiles": 5888,
+        "real_speed_tests": 353601,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2023/quarter=3/2023-07-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2023Q4",
+        "cells_covered": 2980,
+        "ookla_tiles": 5912,
+        "real_speed_tests": 342028,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2023/quarter=4/2023-10-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2024Q1",
+        "cells_covered": 2962,
+        "ookla_tiles": 5880,
+        "real_speed_tests": 317974,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2024/quarter=1/2024-01-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2024Q2",
+        "cells_covered": 2944,
+        "ookla_tiles": 5860,
+        "real_speed_tests": 272988,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2024/quarter=2/2024-04-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2024Q3",
+        "cells_covered": 2938,
+        "ookla_tiles": 5828,
+        "real_speed_tests": 270052,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2024/quarter=3/2024-07-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2024Q4",
+        "cells_covered": 2950,
+        "ookla_tiles": 5847,
+        "real_speed_tests": 268930,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2024/quarter=4/2024-10-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2025Q1",
+        "cells_covered": 2925,
+        "ookla_tiles": 5779,
+        "real_speed_tests": 227649,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2025/quarter=1/2025-01-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2025Q2",
+        "cells_covered": 2928,
+        "ookla_tiles": 5782,
+        "real_speed_tests": 234280,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2025/quarter=2/2025-04-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2025Q3",
+        "cells_covered": 2956,
+        "ookla_tiles": 5829,
+        "real_speed_tests": 259024,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2025/quarter=3/2025-07-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2025Q4",
+        "cells_covered": 2992,
+        "ookla_tiles": 5902,
+        "real_speed_tests": 269377,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2025/quarter=4/2025-10-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2026Q1",
+        "cells_covered": 2986,
+        "ookla_tiles": 5908,
+        "real_speed_tests": 247162,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2026/quarter=1/2026-01-01_performance_mobile_tiles.parquet"
+      },
+      {
+        "quarter": "2026Q2",
+        "cells_covered": 3050,
+        "ookla_tiles": 6084,
+        "real_speed_tests": 313002,
+        "source_url": "https://ookla-open-data.s3.amazonaws.com/parquet/performance/type=mobile/year=2026/quarter=2/2026-04-01_performance_mobile_tiles.parquet"
+      }
+    ]
+  },
+  "other_sources": {
+    "ookla": {
+      "file": "2024-10-01_performance_mobile_tiles.parquet",
+      "present": true,
+      "vintage": "2024 Q4 (single quarterly tile snapshot, 2024-10-01)"
+    },
+    "buildings": {
+      "file": "31d_buildings.csv.gz",
+      "present": true,
+      "vintage": "Google Open Buildings v3 (2023 release)"
+    },
+    "towers": {
+      "file": "502.csv.gz",
+      "present": true,
+      "vintage": "OpenCellID MCC 502 export, downloaded 2026-07"
+    },
+    "osm": {
+      "file": "malaysia-singapore-brunei-260727.osm.pbf",
+      "present": true,
+      "vintage": "Geofabrik extract dated 2026-07-27"
+    },
+    "worldpop": {
+      "file": "mys_ppp_2020_UNadj.tif",
+      "present": true,
+      "vintage": "WorldPop 2020 UN-adjusted (2020 reference year)"
+    },
+    "dosm_population": {
+      "file": "population_malaysia.csv",
+      "present": true,
+      "vintage": "data.gov.my national series, latest row used"
+    },
+    "ridership": {
+      "file": "ridership_headline.csv",
+      "present": true,
+      "vintage": "data.gov.my daily ridership, coverage through 2026-06-30"
+    },
+    "mlab_diurnal_curve": {
+      "file": "mlab.csv",
+      "present": true,
+      "vintage": "M-Lab NDT, aggregated over Dec 2024 onward (UTC-keyed; converted to Asia/Kuala_Lumpur at load)"
+    },
+    "sunway_qoe": {
+      "file": "sunway_qoe.csv",
+      "present": true,
+      "vintage": "Published third-party dataset, NOT self-collected \u2014 Kabeer, Nordin & Behjati (2025), 'An Urban Multi-Operator QoE-Aware Dataset for Cellular Networks in Dense Environments', Mendeley Data v1, DOI 10.17632/dx5xyyfz2y.1, published 2025-06-17. Measurements span 2024-12-03 to 2025-04-02"
+    },
+    "dosm_population_district": {
+      "file": "population_district.parquet",
+      "present": true,
+      "vintage": "DOSM district population, annual series 2020-2025 (published values, in thousands)"
+    }
+  },
+  "source_directories": {
+    "viirs_vnp46a3": {
+      "directory": "VNP46A3_2-20260826_125341",
+      "present": true,
+      "n_files": 6,
+      "vintage": "6 monthly composites, Nov 2024 - Apr 2025"
+    },
+    "esa_worldcover": {
+      "directory": "worldcover",
+      "present": true,
+      "n_files": 2,
+      "vintage": "ESA WorldCover v200, 2021 reference year"
+    }
+  }
+}

@@ -24,6 +24,7 @@ from config import (
     KLANG_VALLEY_DISTRICT_NAMES,
     SPATIAL_HOLDOUT_RESOLUTION,
 )
+from src.data_preprocessing.mlab_diurnal_shape import DISTRICT_SHAPE_RESOLUTION
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,12 @@ def generate_h3_study_grid(res: int = H3_PRIMARY_RESOLUTION) -> gpd.GeoDataFrame
             # whole groups; a random split on individual h3_index values can
             # still leak across spatially autocorrelated neighbours.
             "h3_parent_res6": h3.cell_to_parent(cell, SPATIAL_HOLDOUT_RESOLUTION),
+            # Coarser parent (~20 km) used to bucket cells into "districts"
+            # for PER-DISTRICT M-Lab diurnal curves. Applying one citywide
+            # curve to every cell is what makes the anchored panel rank-one;
+            # this key is the join handle that breaks it once a real
+            # per-district M-Lab export exists (see mlab_diurnal_shape).
+            "h3_parent_res5": h3.cell_to_parent(cell, DISTRICT_SHAPE_RESOLUTION),
         })
 
     grid_gdf = gpd.GeoDataFrame(records, geometry="geometry", crs=CRS_WGS84)
@@ -151,10 +158,12 @@ def generate_h3_study_grid(res: int = H3_PRIMARY_RESOLUTION) -> gpd.GeoDataFrame
     logger.info(
         "Generated %d H3 res-%d cells covering the real study boundary "
         "(mean cell area = %.1f m^2, expected h3.average_hexagon_area = %.1f m^2; "
-        "%d distinct res-%d parent groups available for spatial holdout splits).",
+        "%d distinct res-%d parent groups for spatial holdout splits; %d res-%d district groups "
+        "for per-district diurnal curves).",
         len(grid_gdf), res, grid_gdf["area_m2"].mean(),
         h3.average_hexagon_area(res, unit="m^2"),
         grid_gdf["h3_parent_res6"].nunique(), SPATIAL_HOLDOUT_RESOLUTION,
+        grid_gdf["h3_parent_res5"].nunique(), DISTRICT_SHAPE_RESOLUTION,
     )
     return grid_gdf.sort_values("h3_index").reset_index(drop=True)
 
@@ -164,7 +173,8 @@ def export_grid_geometry(grid_gdf: gpd.GeoDataFrame, processed_dir: Path) -> Tup
     Export the static grid geometry once, in both GeoParquet and GeoJSON, 
     can be used in dashboard
     """
-    out_cols = ["h3_index", "geometry", "centroid_lat", "centroid_lon", "area_m2", "perimeter_m", "h3_parent_res6"]
+    out_cols = ["h3_index", "geometry", "centroid_lat", "centroid_lon", "area_m2", "perimeter_m",
+                "h3_parent_res6", "h3_parent_res5"]
     export_gdf = grid_gdf[out_cols].copy()
 
     parquet_path = processed_dir / "grid_geometry.parquet"

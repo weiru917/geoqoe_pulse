@@ -1,0 +1,95 @@
+{
+  "scope": "Data-readiness check, not a model deliverable.",
+  "split": {
+    "train": "2023Q1-2025Q4",
+    "test": "2026Q1 (real held-out quarter)",
+    "n_train": 33364,
+    "n_test": 2829,
+    "test_positive_rate": 0.2128
+  },
+  "n_features": 100,
+  "baselines": {
+    "prior_only": {
+      "pr_auc": 0.2128,
+      "roc_auc": 0.5,
+      "precision_at_top_200": 0.245
+    },
+    "persistence": {
+      "pr_auc": 0.4796,
+      "roc_auc": 0.7745,
+      "precision_at_top_200": 0.615
+    },
+    "historical_rate": {
+      "pr_auc": 0.6891,
+      "roc_auc": 0.8869,
+      "precision_at_top_200": 0.845
+    },
+    "current_percentile": {
+      "pr_auc": 0.6518,
+      "roc_auc": 0.8286,
+      "precision_at_top_200": 0.8
+    }
+  },
+  "model_xgboost": {
+    "pr_auc": 0.7608,
+    "roc_auc": 0.915,
+    "precision_at_top_200": 0.905
+  },
+  "verdict": {
+    "best_baseline_pr_auc": 0.6891,
+    "model_pr_auc": 0.7608,
+    "lift_over_best_baseline": 1.104,
+    "learnable": true,
+    "reading": "The data carries signal a model can exploit beyond trivial rules."
+  },
+  "top_features": [
+    {
+      "feature": "is_below_area_norm",
+      "gain": 0.3497
+    },
+    {
+      "feature": "dl_percentile_in_quarter",
+      "gain": 0.1372
+    },
+    {
+      "feature": "below_area_norm_rate_to_date",
+      "gain": 0.049
+    },
+    {
+      "feature": "ookla_devices",
+      "gain": 0.0357
+    },
+    {
+      "feature": "ookla_dl_mbps",
+      "gain": 0.0232
+    },
+    {
+      "feature": "ookla_ul_mbps",
+      "gain": 0.0218
+    },
+    {
+      "feature": "rolling_mean_4q_dl",
+      "gain": 0.0185
+    },
+    {
+      "feature": "ookla_tests",
+      "gain": 0.0167
+    },
+    {
+      "feature": "lag_1q_dl",
+      "gain": 0.0083
+    },
+    {
+      "feature": "population_density_per_km2",
+      "gain": 0.0082
+    },
+    {
+      "feature": "landcover_built_up_pct",
+      "gain": 0.0071
+    },
+    {
+      "feature": "population_night",
+      "gain": 0.0071
+    }
+  ]
+}

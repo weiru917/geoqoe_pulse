@@ -105,6 +105,80 @@ def compute_qoe_targets(df):
 compute_composite_qoe_targets = compute_qoe_targets
 
 
+def compute_relative_targets(df, percentile_cutoff: float = None):
+    """
+    A RELATIVE degradation target, alongside the absolute one.
+
+    WHY THIS EXISTS
+    ---------------
+    config.QOE_THRESHOLDS marks a cell degraded below 10 Mbps download.
+    The real Ookla distribution for this study area has a median of
+    175 Mbps and a p25 of 108 Mbps, so the absolute threshold fires on
+    only ~2.3% of labelled cells. That makes "degraded" a rare tail event
+    defined by a constant that was never calibrated against the data, and
+    it cannot express the project's actual question — recurring LOCALISED
+    degradation that aggregate statistics hide. A cell running at 40 Mbps
+    in a city where its neighbours run at 200 is invisible to a 10 Mbps
+    cutoff, yet it is exactly the kind of place an operator should look at.
+
+    WHAT IS COMPUTED
+    ----------------
+    At each timestamp, every cell is ranked against ALL OTHER CELLS in the
+    study area at that same hour:
+
+      target_qoe_percentile_in_area : 0-100 percentile of dl_median among
+          all cells at this timestamp. 50 = exactly typical for the city
+          right now.
+      target_is_below_area_norm     : 1 if that percentile is below
+          `percentile_cutoff` (default config.RELATIVE_DEGRADATION_PERCENTILE).
+
+    This is a SPATIALLY relative measure evaluated per timestamp, not a
+    per-cell historical one. That choice is deliberate: "worse than the
+    rest of the city right now" is the question a prioritisation dashboard
+    actually asks, and unlike a per-cell historical threshold it stays
+    meaningful for a cell that is consistently bad (such a cell would
+    never trip a threshold defined against its own history).
+
+    HONEST LIMITATION ON THE CURRENT PANEL — READ THIS
+    --------------------------------------------------
+    While the hourly panel is built from ONE shared diurnal curve, an
+    anchored cell's value is level(cell) x shape(hour). The cross-cell
+    ranking at time t is then determined entirely by level(cell), because
+    shape(hour) multiplies every cell identically and a common positive
+    factor does not change an ordering. So on the CURRENT panel these
+    columns are effectively TIME-INVARIANT: a cell below the area norm at
+    one hour is below it at every hour.
+
+    That is a property of the panel, not of the definition. Once real
+    per-district curves exist (see mlab_diurnal_shape.load_district_shape_
+    lookups), the ranking genuinely moves through the week and these
+    columns start carrying spatio-temporal information. They are added now
+    so the target contract is stable and the modelling team can build
+    against the definition that will still be correct when the data
+    improves. data_validator.validate_relative_targets reports the
+    measured time-variation each run so nobody has to take this on trust.
+    """
+    from config import RELATIVE_DEGRADATION_PERCENTILE
+
+    if percentile_cutoff is None:
+        percentile_cutoff = RELATIVE_DEGRADATION_PERCENTILE
+
+    df = df.copy()
+    if "dl_median" not in df.columns or "timestamp" not in df.columns:
+        return df
+
+    # Cross-cell percentile within each timestamp. `rank(pct=True)` gives
+    # 0-1; scale to 0-100 for readability in the dashboard.
+    df["target_qoe_percentile_in_area"] = (
+        df.groupby("timestamp")["dl_median"].rank(pct=True) * 100.0
+    )
+    df["target_is_below_area_norm"] = (
+        df["target_qoe_percentile_in_area"] < percentile_cutoff
+    ).astype(int)
+
+    return df
+
+
 def compute_next_hour_targets(df, horizon_hours: int = 1):
     """
     Shift the degradation labels forward within each cell to create genuine
@@ -131,8 +205,10 @@ def compute_next_hour_targets(df, horizon_hours: int = 1):
           which is correct, but this explicit flag makes the reason obvious
           without requiring every downstream user to remember why).
 
-    config.PRIMARY_ML_TARGET points at target_is_degraded_next_1h by
-    default (horizon_hours=1).
+    The target built here is config.PANEL_DEMO_TARGET, not the primary one.
+    It drives the dashboard's hourly animation and is reconstructable from
+    (cell, hour-of-week) — see config.PANEL_STRUCTURE_DISCLOSURE. The primary
+    ML target is config.PRIMARY_ML_TARGET on config.PRIMARY_ML_TABLE.
     """
     df = df.sort_values(["h3_index", "timestamp"]).copy()
     suffix = f"next_{horizon_hours}h"
@@ -141,6 +217,9 @@ def compute_next_hour_targets(df, horizon_hours: int = 1):
     df[f"target_is_degraded_{suffix}"] = grouped["target_is_degraded"].shift(-horizon_hours)
     df[f"target_degradation_class_{suffix}"] = grouped["target_degradation_class"].shift(-horizon_hours)
     df[f"target_qoe_index_{suffix}"] = grouped["target_qoe_index"].shift(-horizon_hours)
+    if "target_is_below_area_norm" in df.columns:
+        df[f"target_is_below_area_norm_{suffix}"] = grouped["target_is_below_area_norm"].shift(-horizon_hours)
+        df[f"target_qoe_percentile_in_area_{suffix}"] = grouped["target_qoe_percentile_in_area"].shift(-horizon_hours)
     df[f"target_{suffix}_valid"] = df[f"target_is_degraded_{suffix}"].notna().astype(int)
 
     return df

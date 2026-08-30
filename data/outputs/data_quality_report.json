@@ -1,0 +1,56 @@
+{
+  "pipeline_version": "3.3.0",
+  "validation": {
+    "n_errors": 0,
+    "n_warnings": 32,
+    "errors": [],
+    "warnings": [
+      "4908 null value(s) in static feature 'sunway_n_records'.",
+      "4908 null value(s) in static feature 'sunway_median_dl_mbps'.",
+      "4908 null value(s) in static feature 'sunway_p90_dl_mbps'.",
+      "4908 null value(s) in static feature 'sunway_median_ul_mbps'.",
+      "4908 null value(s) in static feature 'sunway_median_rsrp_dbm'.",
+      "4908 null value(s) in static feature 'sunway_median_snr_db'.",
+      "4908 null value(s) in static feature 'sunway_n_real_ping_samples'.",
+      "4910 null value(s) in static feature 'sunway_median_ping_ms'.",
+      "4910 null value(s) in static feature 'sunway_median_jitter_ms'.",
+      "4910 null value(s) in static feature 'sunway_median_packet_loss_pct'.",
+      "4908 null value(s) in static feature 'sunway_n_real_test_events'.",
+      "4910 null value(s) in static feature 'sunway_test_event_dl_mbps'.",
+      "4910 null value(s) in static feature 'sunway_test_event_ul_mbps'.",
+      "4908 null value(s) in static feature 'sunway_rsrp_p10_dbm'.",
+      "4908 null value(s) in static feature 'sunway_rsrp_p90_dbm'.",
+      "4908 null value(s) in static feature 'sunway_snr_p10_db'.",
+      "4908 null value(s) in static feature 'sunway_median_cqi'.",
+      "4908 null value(s) in static feature 'sunway_n_operators'.",
+      "4908 null value(s) in static feature 'sunway_pct_poor_rsrp'.",
+      "4908 null value(s) in static feature 'sunway_pct_5g_samples'.",
+      "4910 null value(s) in static feature 'sunway_rsrp_operator_a_dbm'.",
+      "4909 null value(s) in static feature 'sunway_rsrp_operator_b_dbm'.",
+      "4909 null value(s) in static feature 'sunway_rsrp_operator_c_dbm'.",
+      "3876 null value(s) in static feature 'building_height_mean_m'.",
+      "3876 null value(s) in static feature 'building_height_max_m'.",
+      "3876 null value(s) in static feature 'building_height_p90_m'.",
+      "7241 extreme outlier(s) in 'dl_median' (outside 3xIQR fence [-324.22, 573.07]).",
+      "18389 extreme outlier(s) in 'rtt_median' (outside 3xIQR fence [-3.26, 43.29]).",
+      "Relative target 'target_is_below_area_norm' appears to vary over time for 40.1% of cells overall, but that movement is SIMULATION NOISE, not signal: only 0.8% of Ookla-ANCHORED cells ever change state, versus 99.1% of UNANCHORED cells. Anchored cells are deterministic (level x one shared curve), so a common positive factor cannot reorder them; unanchored cells carry a np.random.normal term in their level that reshuffles the ranking every hour. Do not read the aggregate figure as evidence that the panel carries spatio-temporal information \u2014 it does not. This resolves only when the shape itself varies spatially (real per-district curves) or when a genuinely time-varying real source replaces the panel (e.g. multi-quarter Ookla, which gives real per-cell change without needing an hourly source).",
+      "target_is_degraded positive rate is 1.65% \u2014 severe class imbalance; the modelling team should use class weighting / PR-AUC, not plain accuracy.",
+      "0.595% of rows have target_next_1h_valid == 0 (end-of-series warm-up, no future observation) \u2014 these must be dropped before training on the corresponding next-hour target, not treated as label 0.",
+      "target_is_degraded_next_1h positive rate is 4521.73x higher for Ookla-anchored cells (2.75%) than for unanchored cells (0.00%) \u2014 a large enough gap that anchor status carries real predictive signal about the label independent of genuine demand/QoE patterns. Consider reporting metrics split by qoe_level_is_ookla_anchored."
+    ]
+  },
+  "sunway_ground_truth": {
+    "status": "CORRELATION_WITHDRAWN_PENDING_UNIT_VERIFICATION",
+    "why_withdrawn": "sunway_test_event_dl_raw carries the raw GNetTrack TESTDOWNLINK value with an unverified unit (TESTUPLINK reads ~10x higher than TESTDOWNLINK; read as Mbps the values exceed this dataset's own passive throughput peak of 103.9 Mbps in the same cells). Separately, only 8 cells overlap with real Ookla coverage, at a median of 8 test events each. Neither the unit nor the sample size supports a correlation claim.",
+    "to_reinstate": "Resolve TESTDOWNLINK against the GNetTrack Pro field specification, apply the conversion in ingest_sunway_real.load_real_sunway_points, then report the comparison as DESCRIPTIVE at n=8 \u2014 never as validation of Ookla.",
+    "independent_ground_truth_coverage": {
+      "cells_with_real_field_measurements": 10,
+      "cells_total": 4918,
+      "total_real_point_measurements": 30925,
+      "cells_with_real_ping_samples": 8,
+      "cells_with_real_test_events": 8,
+      "statement": "Independent real multi-operator field measurements exist for these cells and nowhere else in the study area. This is a genuine, disclosable coverage fact and does not depend on the unresolved unit question.",
+      "cells_overlapping_real_ookla": 10
+    }
+  }
+}

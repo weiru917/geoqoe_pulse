@@ -1,7 +1,7 @@
 {
-  "pipeline_version": "3.2.0",
-  "generated_at_utc": "2026-08-04T21:18:12.999594+00:00",
-  "git_commit": "b7ade8cad3c215dde9b4ac8b2d7d5ac40d5fe7a5",
+  "pipeline_version": "3.3.0",
+  "generated_at_utc": "2026-08-30T04:04:13.820606+00:00",
+  "git_commit": "1d4de9abebfc6219d5eca5d19daeb908d75d7364",
   "random_seed": 42,
   "crs": {
     "storage_export": "EPSG:4326",
@@ -16,11 +16,15 @@
     "panel_rows": 826224,
     "target_rows": 826224,
     "static_qoe_baseline_rows": 4918,
-    "static_qoe_baseline_real_labels": 2950
+    "static_qoe_baseline_real_labels": 2950,
+    "quarterly_rows": 41448,
+    "quarterly_cells": 3566,
+    "quarterly_rows_with_real_next_q_target": 36193
   },
   "source_datasets": {
     "ookla": {
       "expected_filename": "2024-10-01_performance_mobile_tiles.parquet",
+      "vintage": "2024 Q4 (single quarterly tile snapshot, 2024-10-01)",
       "present": true,
       "size_bytes": 195139957,
       "modified_utc": "2026-07-28T04:45:29.710452+00:00",
@@ -28,6 +32,7 @@
     },
     "buildings": {
       "expected_filename": "31d_buildings.csv.gz",
+      "vintage": "Google Open Buildings v3 (2023 release)",
       "present": true,
       "size_bytes": 981524569,
       "modified_utc": "2026-07-28T15:17:05.317508+00:00",
@@ -35,6 +40,7 @@
     },
     "towers": {
       "expected_filename": "502.csv.gz",
+      "vintage": "OpenCellID MCC 502 export, downloaded 2026-07",
       "present": true,
       "size_bytes": 1856502,
       "modified_utc": "2026-07-28T05:25:51.753529+00:00",
@@ -42,6 +48,7 @@
     },
     "osm": {
       "expected_filename": "malaysia-singapore-brunei-260727.osm.pbf",
+      "vintage": "Geofabrik extract dated 2026-07-27",
       "present": true,
       "size_bytes": 248867428,
       "modified_utc": "2026-07-28T14:40:22.912781+00:00",
@@ -49,6 +56,7 @@
     },
     "worldpop": {
       "expected_filename": "mys_ppp_2020_UNadj.tif",
+      "vintage": "WorldPop 2020 UN-adjusted (2020 reference year)",
       "present": true,
       "size_bytes": 164560892,
       "modified_utc": "2026-07-28T13:22:08.920449+00:00",
@@ -56,6 +64,7 @@
     },
     "dosm_population": {
       "expected_filename": "population_malaysia.csv",
+      "vintage": "data.gov.my national series, latest row used",
       "present": true,
       "size_bytes": 662314,
       "modified_utc": "2026-07-28T05:16:12.337935+00:00",
@@ -63,21 +72,109 @@
     },
     "ridership": {
       "expected_filename": "ridership_headline.csv",
+      "vintage": "data.gov.my daily ridership, coverage through 2026-06-30",
       "present": true,
       "size_bytes": 199530,
       "modified_utc": "2026-07-28T05:27:23.377502+00:00",
       "sha256_first_1mb": "599341ae9d71b1d7ac0d24b7a628b8eadb7a698831d03ac6b448aad7b3cec8a1"
+    },
+    "mlab_diurnal_curve": {
+      "expected_filename": "mlab.csv",
+      "vintage": "M-Lab NDT, aggregated over Dec 2024 onward (UTC-keyed; converted to Asia/Kuala_Lumpur at load)",
+      "present": true,
+      "size_bytes": 12423,
+      "modified_utc": "2026-08-05T05:30:37.700574+00:00",
+      "sha256_first_1mb": "52d6f951ff4c4cc69c1b7ad90842101ed58de6f512c5c110795f571c63bb0aa3"
+    },
+    "sunway_qoe": {
+      "expected_filename": "sunway_qoe.csv",
+      "vintage": "Published third-party dataset, NOT self-collected \u2014 Kabeer, Nordin & Behjati (2025), 'An Urban Multi-Operator QoE-Aware Dataset for Cellular Networks in Dense Environments', Mendeley Data v1, DOI 10.17632/dx5xyyfz2y.1, published 2025-06-17. Measurements span 2024-12-03 to 2025-04-02",
+      "present": true,
+      "size_bytes": 8231217,
+      "modified_utc": "2026-08-25T15:35:32.499072+00:00",
+      "sha256_first_1mb": "fa55f6e9857f60d1dc367178f5e42e67091133b8239d995af71baa3f938243dd"
+    },
+    "dosm_population_district": {
+      "expected_filename": "population_district.parquet",
+      "vintage": "DOSM district population, annual series 2020-2025 (published values, in thousands)",
+      "present": true,
+      "size_bytes": 230962,
+      "modified_utc": "2026-08-29T08:27:41.890404+00:00",
+      "sha256_first_1mb": "fe0a67b8f231ebc83f78a9593d48fa85e7050d0673c882f6069557641d28943d"
+    },
+    "viirs_vnp46a3": {
+      "expected_directory": "VNP46A3_2-20260826_125341",
+      "vintage": "6 monthly composites, Nov 2024 - Apr 2025",
+      "present": true,
+      "n_files": 6,
+      "total_bytes": 286565657,
+      "filenames_sample": [
+        "VNP46A3.A2024306.h28v08.002.2025139154627.h5",
+        "VNP46A3.A2024336.h28v08.002.2025119210817.h5",
+        "VNP46A3.A2025001.h28v08.002.2026071164659.h5",
+        "VNP46A3.A2025032.h28v08.002.2026064130603.h5",
+        "VNP46A3.A2025060.h28v08.002.2026064131848.h5",
+        "VNP46A3.A2025091.h28v08.002.2026064132833.h5"
+      ]
+    },
+    "esa_worldcover": {
+      "expected_directory": "worldcover",
+      "vintage": "ESA WorldCover v200, 2021 reference year",
+      "present": true,
+      "n_files": 2,
+      "total_bytes": 70084843,
+      "filenames_sample": [
+        "ESA_WorldCover_10m_2021_v200_N00E099_Map.tif",
+        "ESA_WorldCover_10m_2021_v200_N03E099_Map.tif"
+      ]
     }
   },
+  "derived_layers": {
+    "static_new_layers": {
+      "path": "data\\processed\\static_new_layers_by_h3.parquet",
+      "present": true,
+      "size_bytes": 381647,
+      "modified_utc": "2026-08-29T21:08:16.577046+00:00",
+      "sha256_first_1mb": "4b8b68be2cb4b3e4110289903ea9c28da81dbe6a7132cd380a20b71751cdcef9"
+    },
+    "sunway_by_h3": {
+      "path": "data\\processed\\sunway_real_by_h3.parquet",
+      "present": true,
+      "size_bytes": 19647,
+      "modified_utc": "2026-08-29T21:10:01.662149+00:00",
+      "sha256_first_1mb": "598b5a43ddd903e860625c02f90bfd07ad928973cda33318892b351ff9731429"
+    },
+    "building_heights": {
+      "path": "data\\processed\\building_heights_by_h3.parquet",
+      "present": true,
+      "size_bytes": 52828,
+      "modified_utc": "2026-08-29T11:34:06.077670+00:00",
+      "sha256_first_1mb": "7294d8c459d64f5c932fdfc4a6fff292966db94cfccee7924821106c7f2cacd2"
+    },
+    "dem": {
+      "path": "data\\processed\\dem_by_h3.parquet",
+      "present": true,
+      "size_bytes": 245762,
+      "modified_utc": "2026-08-29T13:17:42.239237+00:00",
+      "sha256_first_1mb": "bf62064794144dfa880e732a33fc53c20da44782a06d8ba008b05f7b4d6fb9be"
+    }
+  },
+  "source_vintages_note": "cell_time_dataset.parquet's timestamps are a synthetic calendar window chosen so the panel overlaps the ridership file's real coverage. They are NOT the dates the underlying measurements were taken \u2014 see the per-source `vintage` fields above, which span 2020 (population) to 2026 (OSM/ridership).",
   "synthetic_fallback_summary": {
     "tower": 0.0,
     "building": 0.0,
     "osm": 0.0,
     "population": 0.0,
-    "qoe_hourly_shape_simulated": 1.0,
+    "qoe_jitter_loss_simulated": 1.0,
+    "qoe_hourly_shape_sources": [
+      "real_mlab_citywide_curve_utc_converted_to_kuala_lumpur"
+    ],
     "qoe_level_ookla_anchored": 0.5998373322488817
   },
-  "primary_ml_target": "target_is_degraded_next_1h",
+  "primary_ml_target": "target_is_below_area_norm_next_q",
+  "primary_ml_table": "cell_quarter_dataset.parquet",
+  "panel_demo_target": "target_is_degraded_next_1h",
+  "panel_demo_target_warning": "Do NOT report forecast skill on panel_demo_target. The hourly panel is rank-one for Ookla-anchored cells, so that label is reconstructable from (cell, hour-of-week) by memorisation. Benchmark on primary_ml_target in primary_ml_table instead.",
   "forecast_horizon_hours": 1,
   "feature_columns": {
     "for_current_target": [
@@ -85,6 +182,7 @@
       "building_count",
       "building_density_per_km2",
       "building_is_synthetic",
+      "building_n_with_height",
       "built_up_ratio",
       "day_of_week",
       "demand_pressure_base",
@@ -100,6 +198,8 @@
       "in_warmup_window",
       "intersection_count",
       "intersection_density_per_km2",
+      "is_commuter_period",
+      "is_measured_peak_period",
       "is_peak_period",
       "is_weekend",
       "lag_1h_dl_median",
@@ -159,6 +259,7 @@
       "building_count",
       "building_density_per_km2",
       "building_is_synthetic",
+      "building_n_with_height",
       "built_up_ratio",
       "day_of_week",
       "demand_pressure_base",
@@ -178,6 +279,8 @@
       "in_warmup_window",
       "intersection_count",
       "intersection_density_per_km2",
+      "is_commuter_period",
+      "is_measured_peak_period",
       "is_peak_period",
       "is_weekend",
       "jitter_median",
@@ -244,6 +347,117 @@
     ],
     "note": "Two different lists because same-hour QoE columns and their spatial lags are leakage when predicting the SAME hour's label, but legitimate features when predicting NEXT hour's label. See run_pipeline.get_feature_columns()."
   },
+  "fitted_scalers": {
+    "note": "Min-max scalers are fitted on the earliest 80% of the panel's timestamps only, not on all rows, so a temporal-holdout model's scaler has not seen the test period. Values outside the fitted range are clipped to [0,1]. These parameters are recorded because a scaler is part of the data contract, not an implementation detail \u2014 reproduce them exactly if you re-scale downstream.",
+    "scalers": {
+      "historical_qoe_pressure": {
+        "min": 6.4083741261899165,
+        "max": 373.4768880619931,
+        "fitted_on_rows": 663930,
+        "total_rows": 826224,
+        "fitted_on_all_rows": false
+      },
+      "nearby_demand_spatial_lag": {
+        "min": 0.11472046089261534,
+        "max": 83.94597343625888,
+        "fitted_on_rows": 663930,
+        "total_rows": 826224,
+        "fitted_on_all_rows": false
+      },
+      "demand_pressure_index": {
+        "min": 0.10848598112265427,
+        "max": 89.18000008426156,
+        "fitted_on_rows": 663930,
+        "total_rows": 826224,
+        "fitted_on_all_rows": false
+      }
+    }
+  },
+  "coverage_bias": {
+    "coverage_tiers": {
+      "measured": 2950,
+      "unknown": 1688,
+      "estimable": 280
+    },
+    "tier_guidance": {
+      "measured": "Real Ookla label. Show the value.",
+      "estimable": "No label, but inside the labelled cells' feature range. A model prediction is interpolation \u2014 show it with a confidence caveat.",
+      "unknown": "No label and outside common support. A prediction is extrapolation into unseen territory. Present as 'insufficient data' rather than as a number \u2014 an honest gap reads better than a confident guess."
+    },
+    "roc_auc": 0.9774119815350694,
+    "pr_auc": 0.985691111650624,
+    "common_support_low": 0.22723079368243548,
+    "common_support_high": 0.999999637355933,
+    "n_unlabelled": 1968,
+    "n_unlabelled_outside_common_support": 1688,
+    "n_features_used": 44,
+    "interpretation": "An AUC well above 0.5 means Ookla coverage is predictable from GIS features, so training on labelled cells and predicting unlabelled ones is extrapolation. Weight by coverage_propensity and flag predictions outside common support."
+  },
+  "application_profiles": {
+    "threshold_source": "Engineering guidance \u2014 ITU-T G.114 one-way delay for interactive speech, typical codec and streaming throughput requirements. NOT derived from any survey.",
+    "weight_source": "MCMC Broadband Quality of Experience Survey 2024, mobile broadband results. Used ONLY to weight how much each application failure matters to Malaysian users \u2014 never to set a technical threshold.",
+    "known_gap": "Ookla provides download, upload and latency but NOT jitter or packet loss. Voice and video-call profiles are therefore partial and optimistic: a cell can meet every measurable criterion and still deliver choppy audio. app_n_evaluable records how many criteria were actually checkable per row.",
+    "applications": {
+      "voice_call": {
+        "label": "Online voice calls",
+        "min_dl_mbps": 0.1,
+        "max_rtt_ms": 150.0,
+        "bqoes_importance": 4.31,
+        "bqoes_gap": -0.34,
+        "driver": "latency, jitter and loss \u2014 throughput is almost irrelevant",
+        "not_measurable": [
+          "jitter",
+          "packet_loss"
+        ],
+        "top_user_complaint": "choppy or broken voice (49.0% of dissatisfied users)"
+      },
+      "web_browsing": {
+        "label": "Web browsing",
+        "min_dl_mbps": 5.0,
+        "max_rtt_ms": 100.0,
+        "bqoes_importance": 4.24,
+        "bqoes_gap": -0.31,
+        "driver": "latency first \u2014 a page load is many round trips \u2014 then throughput",
+        "not_measurable": [],
+        "top_user_complaint": "waiting for pages to load (24.0%)"
+      },
+      "video_call": {
+        "label": "Online video calls",
+        "min_dl_mbps": 2.0,
+        "max_rtt_ms": 150.0,
+        "bqoes_importance": 4.09,
+        "bqoes_gap": -0.19,
+        "driver": "throughput and jitter together, in both directions",
+        "not_measurable": [
+          "jitter",
+          "packet_loss"
+        ],
+        "top_user_complaint": "video freezing or disconnecting (38.9%)"
+      },
+      "video_streaming": {
+        "label": "Video streaming (HD)",
+        "min_dl_mbps": 5.0,
+        "max_rtt_ms": 400.0,
+        "bqoes_importance": 3.88,
+        "bqoes_gap": 0.04,
+        "driver": "sustained download; buffering absorbs latency",
+        "not_measurable": [],
+        "top_user_complaint": "video stalls and buffering (52.4%)"
+      },
+      "online_gaming": {
+        "label": "Online gaming",
+        "min_dl_mbps": 1.0,
+        "max_rtt_ms": 100.0,
+        "bqoes_importance": 3.47,
+        "bqoes_gap": 0.33,
+        "driver": "latency above all; bandwidth needs are tiny",
+        "not_measurable": [
+          "jitter"
+        ],
+        "top_user_complaint": "animation stuttering (42.9%)"
+      }
+    }
+  },
   "high_leakage_risk_features": {
     "demand_pressure_index": "Circular with the simulated QoE generator via its historical_qoe component (lag_24h_rtt_median). Use demand_pressure_base instead for a non-circular, real-data-only feature.",
     "demand_pressure_index_pre_spatial": "Same circularity as demand_pressure_index, pre-spatial-smoothing.",
@@ -260,13 +474,24 @@
     "ookla_is_synthetic": "has_real_ookla_label inverted under a different name \u2014 same exclusion reason."
   },
   "simulation_disclosure": {
-    "panel_qoe_hourly_shape_is_simulated": true,
-    "explanation": "The hourly QoE panel (cell_time_dataset.parquet) is a simulated diurnal-demand scenario, not observed network measurements. It is a software-integration and dashboard-demo fixture only. For a modelling claim that stands up to review, use cell_static_qoe_baseline.parquet (real Ookla-anchored targets, zero synthetic QoE) or obtain real repeated-timestamp QoE measurements before training a forecast model and reporting its accuracy as evidence of real-world skill.",
+    "explanation": "cell_time_dataset.parquet is a hierarchical panel, not a measurement: a REAL citywide hourly shape (M-Lab NDT) applied to a REAL per-cell level (Ookla quarterly) where one exists, and to a formula-derived level where it does not. Jitter, loss and upload remain simulated. No per-cell per-hour QoE measurement source exists for this project. Because one shape is shared by every cell, the anchored panel is rank-one and its forecast target is analytically reconstructable \u2014 see PANEL_STRUCTURE_DISCLOSURE before reporting any forecast metric. For a modelling claim that stands up to review, use cell_static_qoe_baseline.parquet (real Ookla targets, real GIS features, zero synthetic QoE).",
+    "per_component_provenance": {
+      "hourly_shape_dl_rtt": "REAL \u2014 M-Lab NDT citywide diurnal curve (2.05M tests), keyed in UTC in the source CSV and converted to Asia/Kuala_Lumpur at load. ONE curve applied uniformly to every cell: a real shape, not per-cell resolution. Traffic mix not ASN-filtered, so it may include fixed as well as mobile tests.",
+      "hourly_level_dl_rtt_anchored_cells": "REAL \u2014 the cell's own Ookla 2024 Q4 quarterly average, used as the level the real hourly shape is applied to.",
+      "hourly_level_dl_rtt_unanchored_cells": "FORMULA-DERIVED \u2014 no Ookla tile coverage exists for these cells, so the level comes from a population/POI load function plus seeded Gaussian noise. Flagged per row by qoe_level_is_ookla_anchored.",
+      "hourly_jitter_loss_ul": "SIMULATED \u2014 no free real source exists at this resolution. Sparse real ping/jitter/loss values (0.2% coverage) exist only inside the Sunway inset and are kept separately, never merged into these."
+    },
     "real_ookla_anchored_cell_fraction": 0.5998373322488817,
     "recommended_defensible_dataset": "cell_static_qoe_baseline.parquet (real Ookla labels only, zero simulated values)"
   },
+  "panel_structure_disclosure": {
+    "structure": "rank_one_separable",
+    "explanation": "For Ookla-anchored cells the hourly panel is exactly ookla_static(cell) x mlab_curve(hour-of-week), deterministic and rank-one: every anchored cell shares ONE identical temporal curve, differing only in level. Consequences the modelling team must know: (1) target_is_degraded_next_1h is fully determined by (cell, hour-of-week), so a model given cell identity and time recovers it by memorisation \u2014 reported forecast skill on this panel is not evidence of real predictive ability; (2) there is no cell-specific temporal dynamics, so no model can learn that one area degrades earlier than another, because that information is not present; (3) Getis-Ord Gi* is invariant to a global scale factor, so hotspot recurrence varies only through the Gaussian noise injected into unanchored cells \u2014 'this area degraded in N of the last 7 evenings' is not currently supportable. Fixing this requires a spatially-varying real diurnal curve (per-district M-Lab), not a modelling change.",
+    "verified_reconstruction": "dl/rtt for Ookla-anchored cells reconstruct from ookla_static x mlab_curve with max absolute error 0.0, and the reconstructed degradation target matches the stored target on 100% of anchored rows."
+  },
   "known_limitations": [
-    "No real per-hour/repeated-timestamp QoE measurement source exists in this project (no organiser data was supplied). cell_time_dataset.parquet's hourly QoE values are a simulated diurnal-demand scenario, useful for pipeline/dashboard testing only.",
+    "No per-CELL per-hour QoE measurement source exists for this study area. cell_time_dataset.parquet combines a REAL citywide hourly shape (M-Lab NDT, converted from UTC to Asia/Kuala_Lumpur at load) with a REAL per-cell level (Ookla quarterly) where tile coverage exists, and a formula-derived level where it does not. Jitter, packet loss and upload remain simulated. Because ONE shape is shared by every cell, the anchored panel is rank-one \u2014 see panel_structure_disclosure before reporting any forecast metric from it.",
+    "The M-Lab curve is a single CITY-WIDE curve and was not ASN-filtered, so it may mix fixed-broadband and mobile tests. Per-district curves (which would break the rank-one structure) require re-querying M-Lab grouped by client geolocation.",
     "No real network capacity/traffic/utilisation data exists. demand_pressure_* features are exposure/activity PROXIES, not a measurement of actual load vs. capacity \u2014 do not claim 'confirmed congestion', only 'QoE degradation associated with estimated demand pressure'.",
     "Study area is Klang Valley core: Kuala Lumpur federal territory, Putrajaya federal territory, and 6 urbanised Selangor districts (Gombak, Hulu Langat, Klang, Kuala Langat, Petaling, Sepang). Deliberately excludes rural/exurban Selangor (Sabak Bernam, Hulu Selangor, etc.).",
     "On the SIMULATED hourly panel (cell_time_dataset.parquet), positive target_is_degraded_next_1h labels are concentrated in Ookla-anchored cells \u2014 see run_full_validation's validate_target_anchor_correlation warnings for the exact current split. qoe_level_is_ookla_anchored can be a near-trivial predictor of the target on this simulated panel; report metrics split by anchor status, or restrict training/eval to anchored cells, rather than trusting one aggregate PR-AUC.",

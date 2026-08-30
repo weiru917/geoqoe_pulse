@@ -1,0 +1,99 @@
+{
+  "what_this_tests": "Whether cells within one small area share a common RELATIVE diurnal shape, which is the assumption behind building the hourly panel as level(cell) x shape(hour) with a single shared shape.",
+  "hard_limits": {
+    "hours_available": "09:00-16:00 only, concentrated 11:00-14:00",
+    "cannot_test": "The 19:00-00:00 evening trough the M-Lab curve identifies as this city's real congestion window. No Sunway data exists after 16:00.",
+    "spatial_scope": "All 10 cells lie within ~6 km^2. This tests WITHIN-area separability only. It does not test whether the CBD and a distant suburb share a shape \u2014 the assumption that actually matters for a citywide curve.",
+    "calendar_days": 18,
+    "min_records_per_cell_hour": 100
+  },
+  "mean_passive_downlink_throughput": {
+    "metric": "mean_passive_downlink_throughput",
+    "status": "COMPLETED",
+    "n_cells": 4,
+    "hours_covered": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "shared_shape_by_hour": {
+      "10": 1.6458,
+      "11": 1.5303,
+      "12": 0.6475,
+      "13": 0.6227,
+      "14": 1.0382,
+      "15": 0.0604,
+      "16": 0.0018
+    },
+    "per_cell_r2_vs_shared_shape": {
+      "median": 0.5439,
+      "min": 0.3518,
+      "max": 0.7108,
+      "n_cells_scored": 4,
+      "n_cells_negative_r2": 0
+    },
+    "per_cell_correlation_vs_shared_shape": {
+      "median": 0.8123,
+      "min": 0.697,
+      "max": 0.944
+    },
+    "relative_dispersion_across_cells_by_hour": {
+      "10": 0.6007,
+      "11": 0.2543,
+      "12": 0.6742,
+      "13": 0.7709,
+      "14": 0.7574
+    },
+    "median_relative_dispersion": 0.6742,
+    "verdict": "NOT_SUPPORTED"
+  },
+  "median_rsrp_dbm": {
+    "metric": "median_rsrp_dbm",
+    "status": "COMPLETED",
+    "n_cells": 4,
+    "hours_covered": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "shared_shape_by_hour": {
+      "10": 1.0103,
+      "11": 0.9792,
+      "12": 0.9905,
+      "13": 1.0019,
+      "14": 1.0278,
+      "15": 1.0468,
+      "16": 0.9145
+    },
+    "per_cell_r2_vs_shared_shape": {
+      "median": 0.8204,
+      "min": -3.2768,
+      "max": 0.9753,
+      "n_cells_scored": 4,
+      "n_cells_negative_r2": 1
+    },
+    "per_cell_correlation_vs_shared_shape": {
+      "median": 0.9535,
+      "min": 0.5914,
+      "max": 0.9931
+    },
+    "relative_dispersion_across_cells_by_hour": {
+      "10": 0.004,
+      "11": 0.0147,
+      "12": 0.0117,
+      "13": 0.0104,
+      "14": 0.0181
+    },
+    "median_relative_dispersion": 0.0117,
+    "verdict": "SUPPORTED_WITHIN_DAYTIME_WINDOW"
+  },
+  "overall_interpretation": "Read the verdicts as evidence about a NARROW claim only. A supported result means cells in one small area share a daytime shape; it does not license applying one curve citywide, and it says nothing about the evening peak, which this data cannot reach. A NOT_SUPPORTED result is strong evidence against the panel's construction, because failing within a single 6 km^2 area is worse than failing across the city."
+}

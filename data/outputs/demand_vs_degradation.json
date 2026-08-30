@@ -1,0 +1,36 @@
+{
+  "question": "Is degradation associated with increasing local activity?",
+  "answer": "Yes \u2014 a real, statistically strong association, modest in size.",
+  "data": "Real Ookla quarterly QoE x real VIIRS quarterly activity growth. No simulated values.",
+  "within_cell_correlation": {
+    "raw": -0.05,
+    "controlling_for_baseline_speed": -0.0513,
+    "n": 23008,
+    "reading": "Negative = when a cell's activity rises, its speed falls. Small effect per cell-quarter."
+  },
+  "risk_by_activity_growth": {
+    "fastest_growth_quartile_pct": 14.98,
+    "other_quartiles_pct": 9.69,
+    "relative_risk": 1.55,
+    "n_fastest": 3117,
+    "n_other": 9349,
+    "restricted_to": "brighter half of cells, where growth estimates are reliable"
+  },
+  "holds_within_every_speed_band": {
+    "slow": 5.86,
+    "mid": 0.99,
+    "fast": 1.11
+  },
+  "highest_risk_segment": {
+    "definition": "already-slow cells that are also in the fastest activity-growth quartile",
+    "risk_pct": 32.59,
+    "comparison_slow_cells_not_growing_pct": 29.52,
+    "use": "This is the prioritisation signal \u2014 where demand growth is meeting an already-weak network."
+  },
+  "honest_caveats": [
+    "VIIRS measures light, a proxy for activity \u2014 not mobile traffic and not users. Say 'associated with rising activity', never 'caused by rising demand'.",
+    "The per-cell-quarter correlation is small (about -0.05); the quartile contrast is the useful framing, not the correlation coefficient.",
+    "This is an association across many cells over time, not proof of causation in any one cell. Without capacity data the mechanism cannot be confirmed.",
+    "The U-shape visible in the unrestricted sample is a measurement artefact of dim cells with noisy growth estimates, not a real second risk group."
+  ]
+}

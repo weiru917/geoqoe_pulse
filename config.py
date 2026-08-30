@@ -14,11 +14,10 @@ DATA_DIR = BASE_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
 BOUNDARY_DIR = DATA_DIR / "boundary"
 PROCESSED_DIR = DATA_DIR / "processed"
-FEATURES_DIR = DATA_DIR / "features"
 OUTPUT_DIR = DATA_DIR / "outputs"
 
 # Ensure directories exist
-for folder in [RAW_DIR, BOUNDARY_DIR, PROCESSED_DIR, FEATURES_DIR, OUTPUT_DIR]:
+for folder in [RAW_DIR, BOUNDARY_DIR, PROCESSED_DIR, OUTPUT_DIR]:
     folder.mkdir(parents=True, exist_ok=True)
 
 # --------------------------------------------------------------------------
@@ -157,6 +156,60 @@ RAW_DATASETS = {
     "worldpop": RAW_DIR / "mys_ppp_2020_UNadj.tif",
     "dosm_population": RAW_DIR / "population_malaysia.csv",
     "ridership": RAW_DIR / "ridership_headline.csv",
+    # Registered so they are checksummed and fingerprinted in metadata.json
+    # like the original seven. Previously these two real sources were read
+    # by hardcoded absolute paths inside their own modules and appeared
+    # nowhere in the provenance record.
+    "mlab_diurnal_curve": RAW_DIR / "mlab.csv",
+    "sunway_qoe": RAW_DIR / "sunway_qoe.csv",
+    # Official DOSM population by district, ANNUAL 2020-2025 — the only
+    # time-varying demand source in the project.
+    "dosm_population_district": RAW_DIR / "population_district.parquet",
+}
+
+# Raw sources that are DIRECTORIES of files (satellite tiles/granules)
+# rather than a single file. Fingerprinted by file count + total bytes.
+RAW_DATASET_DIRS = {
+    "viirs_vnp46a3": RAW_DIR / "VNP46A3_2-20260826_125341",
+    "esa_worldcover": RAW_DIR / "worldcover",
+}
+
+# Intermediate per-H3 extractions produced by the standalone raster
+# scripts (scripts/extract/viirs.py, scripts/extract/worldcover.py, scripts/extract/merge_layers.py).
+# run_pipeline merges `static_new_layers` into cell_static_features BEFORE
+# the static QoE baseline is built, so VIIRS/WorldCover reach the
+# modelling dataset, the hourly panel and the feature dictionary — not
+# just the static features file, which is where they previously
+# dead-ended.
+DERIVED_LAYERS = {
+    "static_new_layers": PROCESSED_DIR / "static_new_layers_by_h3.parquet",
+    "sunway_by_h3": PROCESSED_DIR / "sunway_real_by_h3.parquet",
+    # OSM building heights, extracted from the PBF already in data/raw/.
+    # Sparse (6.5% of buildings tagged, 21% of cells covered) and
+    # coverage-biased toward well-mapped areas — see scripts/extract/building_heights.py.
+    "building_heights": PROCESSED_DIR / "building_heights_by_h3.parquet",
+    # Copernicus DEM GLO-30 terrain statistics. Public S3, no account.
+    "dem": PROCESSED_DIR / "dem_by_h3.parquet",
+}
+
+# Acquisition vintage per source, recorded in metadata.json. The hourly
+# panel's timestamps are a synthetic calendar window chosen to overlap the
+# ridership file's real coverage — they are NOT the dates the underlying
+# measurements were taken, and these vintages are the honest answer to
+# "how fresh is this data".
+SOURCE_VINTAGES = {
+    "ookla": "14 quarterly tile releases, 2023Q1-2026Q2. The single 2024Q4 snapshot is still used as the hourly panel's anchor level; the quarterly panel uses all 14",
+    "buildings": "Google Open Buildings v3 (2023 release)",
+    "towers": "OpenCellID MCC 502 export, downloaded 2026-07",
+    "osm": "Geofabrik extract dated 2026-07-27",
+    "worldpop": "WorldPop 2020 UN-adjusted (2020 reference year)",
+    "dosm_population": "data.gov.my national series, latest row used",
+    "ridership": "data.gov.my daily ridership, coverage through 2026-06-30",
+    "mlab_diurnal_curve": "M-Lab NDT, aggregated over Dec 2024 onward (UTC-keyed; converted to Asia/Kuala_Lumpur at load)",
+    "sunway_qoe": "Published third-party dataset, NOT self-collected — Kabeer, Nordin & Behjati (2025), 'An Urban Multi-Operator QoE-Aware Dataset for Cellular Networks in Dense Environments', Mendeley Data v1, DOI 10.17632/dx5xyyfz2y.1, published 2025-06-17. Measurements span 2024-12-03 to 2025-04-02",
+    "dosm_population_district": "DOSM district population, annual series 2020-2025 (published values, in thousands)",
+    "viirs_vnp46a3": "43 monthly composites, 2022-12 to 2026-06",
+    "esa_worldcover": "ESA WorldCover v200, 2021 reference year",
 }
 
 # --------------------------------------------------------------------------
@@ -256,6 +309,26 @@ HIGH_LEAKAGE_RISK_FEATURES = {
 # so the two labels can no longer disagree with each other on the same row
 # (previously: is_degraded used dl<10/rtt>100 while the class label used a
 # separately hardcoded dl<15/rtt>80 — fixed).
+# RELATIVE degradation cutoff, as a cross-cell percentile evaluated per
+# timestamp. Complements (does not replace) the absolute QOE_THRESHOLDS
+# below. The absolute 10 Mbps cutoff fires on only ~2.3% of labelled cells
+# against a real Ookla median of 175 Mbps, so it cannot express "this
+# neighbourhood is worse than the city" — the question the proposal is
+# actually about. See qoe_target.compute_relative_targets.
+# How is_peak_period is defined.
+#   "measured"  — the hours the panel's own realised curve is worst. Derived
+#                 from the real M-Lab diurnal shape, so it reflects when this
+#                 city's network is actually busiest (19:00-00:00).
+#   "commuter"  — the original hardcoded assumption (weekday 08-10, 17-20).
+#                 Kept selectable so the old behaviour is reproducible, but
+#                 the measurement does not support it: mean throughput during
+#                 that window is no worse than the rest of the day.
+# Both definitions are always exported (is_peak_period follows this setting;
+# is_commuter_period always holds the assumption) so nothing is lost.
+PEAK_PERIOD_DEFINITION = "measured"
+
+RELATIVE_DEGRADATION_PERCENTILE = 25.0
+
 QOE_THRESHOLDS = {
     "dl_degraded_mbps": 10.0,   # class >= 1 ("degraded") and is_degraded=1
     "rtt_degraded_ms": 100.0,
@@ -287,7 +360,25 @@ QOE_INDEX_WEIGHTS = {
 # this cell degraded right now" using features measured in that same hour —
 # not a forecast. The recommended primary MVP target is now the 1-hour-ahead
 # shifted label, computed by qoe_target.compute_next_hour_targets().
-PRIMARY_ML_TARGET = "target_is_degraded_next_1h"
+# CORRECTED in 3.3.0. This constant used to name the hourly target, which
+# PANEL_STRUCTURE_DISCLOSURE (below) then explains is analytically
+# reconstructable from (cell, hour-of-week) — so the file recommended a
+# target it also documents as memorisable. It flows into metadata.json's
+# `primary_ml_target`, so anyone reading the metadata rather than HANDOFF.md
+# was pointed at the wrong label.
+#
+# The primary target is the QUARTERLY relative one, on cell_quarter_dataset:
+# a real observed Ookla measurement one quarter ahead, with no reconstructable
+# structure. Prevalence ~22-25% by construction (25th percentile of the
+# citywide distribution each quarter), which is also far better balanced than
+# the absolute is_degraded flag (3.0% and falling as Malaysian speeds rise).
+PRIMARY_ML_TARGET = "target_is_below_area_norm_next_q"
+PRIMARY_ML_TABLE = "cell_quarter_dataset.parquet"
+
+# The hourly panel's target. Kept because the panel still ships and the
+# dashboard animates it, but it is a DEMONSTRATION label, not a benchmark:
+# see PANEL_STRUCTURE_DISCLOSURE. Never report forecast skill on it.
+PANEL_DEMO_TARGET = "target_is_degraded_next_1h"
 FORECAST_HORIZON_HOURS = 1
 
 # --------------------------------------------------------------------------
@@ -300,21 +391,76 @@ FORECAST_HORIZON_HOURS = 1
 # Ookla anchor exists for that cell) is generated by a diurnal-shape formula,
 # not observed. This is tracked explicitly (see data_downloader.py and
 # metadata_utils.py) rather than left implicit in a single ambiguous flag.
-PANEL_QOE_HOURLY_SHAPE_IS_SIMULATED = True
+# Per-component honesty, replacing the single ambiguous "the panel is
+# simulated" boolean. Each hourly column is one of three things and the
+# metadata now says which, per component, rather than collapsing them.
+PANEL_COMPONENT_PROVENANCE = {
+    "hourly_shape_dl_rtt": (
+        "REAL — M-Lab NDT citywide diurnal curve (2.05M tests), keyed in UTC "
+        "in the source CSV and converted to Asia/Kuala_Lumpur at load. ONE "
+        "curve applied uniformly to every cell: a real shape, not per-cell "
+        "resolution. Traffic mix not ASN-filtered, so it may include fixed "
+        "as well as mobile tests."
+    ),
+    "hourly_level_dl_rtt_anchored_cells": (
+        "REAL — the cell's own Ookla 2024 Q4 quarterly average, used as the "
+        "level the real hourly shape is applied to."
+    ),
+    "hourly_level_dl_rtt_unanchored_cells": (
+        "FORMULA-DERIVED — no Ookla tile coverage exists for these cells, so "
+        "the level comes from a population/POI load function plus seeded "
+        "Gaussian noise. Flagged per row by qoe_level_is_ookla_anchored."
+    ),
+    "hourly_jitter_loss_ul": (
+        "SIMULATED — no free real source exists at this resolution. Sparse "
+        "real ping/jitter/loss values (0.2% coverage) exist only inside the "
+        "Sunway inset and are kept separately, never merged into these."
+    ),
+}
+
+# The structural property that actually bounds what can be claimed from
+# the panel — recorded explicitly because it is not implied by "the shape
+# is real". For an Ookla-anchored cell the hourly value is exactly
+# level(cell) x curve(hour) with no noise term, so the panel factorises
+# (rank one) and the degradation target is analytically reconstructable
+# from two static columns plus the hour. Verified empirically: the
+# reconstruction matches the stored target on 100% of anchored rows.
+PANEL_STRUCTURE_DISCLOSURE = (
+    "For Ookla-anchored cells the hourly panel is exactly "
+    "ookla_static(cell) x mlab_curve(hour-of-week), deterministic and "
+    "rank-one: every anchored cell shares ONE identical temporal curve, "
+    "differing only in level. Consequences the modelling team must know: "
+    "(1) target_is_degraded_next_1h is fully determined by (cell, "
+    "hour-of-week), so a model given cell identity and time recovers it by "
+    "memorisation — reported forecast skill on this panel is not evidence "
+    "of real predictive ability; (2) there is no cell-specific temporal "
+    "dynamics, so no model can learn that one area degrades earlier than "
+    "another, because that information is not present; (3) Getis-Ord Gi* is "
+    "invariant to a global scale factor, so hotspot recurrence varies only "
+    "through the Gaussian noise injected into unanchored cells — 'this area "
+    "degraded in N of the last 7 evenings' is not currently supportable. "
+    "Fixing this requires a spatially-varying real diurnal curve (per-"
+    "district M-Lab), not a modelling change."
+)
+
 SIMULATION_DISCLAIMER = (
-    "The hourly QoE panel (cell_time_dataset.parquet) is a simulated "
-    "diurnal-demand scenario, not observed network measurements. It is a "
-    "software-integration and dashboard-demo fixture only. For a modelling "
-    "claim that stands up to review, use cell_static_qoe_baseline.parquet "
-    "(real Ookla-anchored targets, zero synthetic QoE) or obtain real "
-    "repeated-timestamp QoE measurements before training a forecast model "
-    "and reporting its accuracy as evidence of real-world skill."
+    "cell_time_dataset.parquet is a hierarchical panel, not a measurement: "
+    "a REAL citywide hourly shape (M-Lab NDT) applied to a REAL per-cell "
+    "level (Ookla quarterly) where one exists, and to a formula-derived "
+    "level where it does not. Jitter, loss and upload remain simulated. "
+    "No per-cell per-hour QoE measurement source exists for this project. "
+    "Because one shape is shared by every cell, the anchored panel is "
+    "rank-one and its forecast target is analytically reconstructable — see "
+    "PANEL_STRUCTURE_DISCLOSURE before reporting any forecast metric. For a "
+    "modelling claim that stands up to review, use "
+    "cell_static_qoe_baseline.parquet (real Ookla targets, real GIS "
+    "features, zero synthetic QoE)."
 )
 
 # --------------------------------------------------------------------------
 # Pipeline / Metadata
 # --------------------------------------------------------------------------
-PIPELINE_VERSION = "3.2.0"  # 3.0.0: target-consistency, leakage, and boundary-
+PIPELINE_VERSION = "3.3.0"  # 3.0.0: target-consistency, leakage, and boundary-
                              #   scope fixes.
                              # 3.1.0: raw-file extraction bounds fix
                              #   (extraction_bounds() derives from the real
@@ -328,3 +474,19 @@ PIPELINE_VERSION = "3.2.0"  # 3.0.0: target-consistency, leakage, and boundary-
                              #   automated anchor-status/target-leakage audit
                              #   added to data_validator.py.
                              # See CHANGELOG.md for full detail.
+                             # 3.3.0 (Phase 0 correctness pass):
+                             #   - M-Lab curve converted UTC -> Asia/
+                             #     Kuala_Lumpur at load (was applied 8h out
+                             #     of phase); hard regression guard added.
+                             #   - Sunway TESTDOWNLINK renamed *_dl_raw and
+                             #     the Ookla-vs-Sunway correlation withdrawn
+                             #     (unit unverified, n=8).
+                             #   - VIIRS/WorldCover/Sunway merged BEFORE the
+                             #     static QoE baseline is built, so all 24
+                             #     real columns reach every output.
+                             #   - All 11 WorldCover classes retained; tile
+                             #     counts accumulated across the lat-3.0 seam.
+                             #   - metadata.json registers all 11 sources,
+                             #     records source vintages, and discloses the
+                             #     panel's rank-one structure. Feature-
+                             #     dictionary completeness is now asserted.

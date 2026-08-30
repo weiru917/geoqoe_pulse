@@ -158,6 +158,84 @@ def validate_panel(panel_df: pd.DataFrame, expected_cells: int, report: Validati
                         n_outliers, col, lower, upper)
 
 
+EVENING_HOURS = {17, 18, 19, 20, 21, 22, 23, 0, 1}
+
+
+def validate_diurnal_alignment(panel_df: pd.DataFrame, report: ValidationReport) -> None:
+    """
+    Regression guard for the M-Lab timezone bug (see
+    mlab_diurnal_shape.py's TIMEZONE section).
+
+    mlab.csv is keyed in UTC; the panel's timestamps are naive local
+    (UTC+8) Klang Valley time. A previous version looked the UTC curve up
+    with a local hour, applying the whole diurnal pattern 8 hours out of
+    phase — the panel's worst hour landed at 14:00 "local" and its best at
+    21:00 "local", and `is_peak_period` came out NEGATIVELY associated with
+    degradation.
+
+    The invariant asserted here is deliberately about network behaviour,
+    not about code: for a mobile network in this city, the hour with the
+    lowest median download must fall in the evening/night. If it lands in
+    the morning or early afternoon, the curve has been applied in the
+    wrong timezone. This is a hard error rather than a warning because
+    every downstream temporal claim — the dashboard's time slider, the
+    "peak period" narrative, the next-hour forecast target — is wrong in
+    the same direction when it fires.
+
+    If the shape source is ever legitimately replaced (a different city, a
+    different measurement source), update EVENING_HOURS rather than
+    deleting this check.
+    """
+    if "timestamp" not in panel_df.columns or "dl_median" not in panel_df.columns:
+        return
+
+    by_hour = panel_df.groupby(panel_df["timestamp"].dt.hour)["dl_median"].mean()
+    if by_hour.empty:
+        return
+
+    worst_hour = int(by_hour.idxmin())
+    best_hour = int(by_hour.idxmax())
+
+    if worst_hour not in EVENING_HOURS:
+        report.error(
+            "Diurnal alignment check FAILED: the panel's lowest-throughput hour is %02d:00 local "
+            "(best hour %02d:00). For a mobile network in Klang Valley the busiest, slowest hour must "
+            "fall in the evening/night (%s). This is the exact signature of the M-Lab UTC-vs-local "
+            "timezone bug — mlab.csv is keyed in UTC and must be converted to Asia/Kuala_Lumpur "
+            "before lookup (see mlab_diurnal_shape.load_mlab_shape_lookup). Every downstream temporal "
+            "claim is shifted by 8 hours while this fails.",
+            worst_hour, best_hour, sorted(EVENING_HOURS),
+        )
+    else:
+        logger.info(
+            "Diurnal alignment OK: lowest-throughput hour is %02d:00 local, highest is %02d:00 — "
+            "consistent with a real evening-peak mobile network pattern.",
+            worst_hour, best_hour,
+        )
+
+    # Secondary, non-fatal: is_peak_period is a hand-written assumption
+    # (local 08-10 and 17-20 commuter hours), NOT derived from the measured
+    # curve. On the real M-Lab data the Klang Valley mobile trough is
+    # roughly 19:00-00:00 and mornings show no trough at all, so the
+    # configured window can be correct-in-timezone yet still a poor match
+    # for observed behaviour. Surfaced so the feature is redefined
+    # deliberately rather than left as an untested assumption.
+    if "is_peak_period" in panel_df.columns:
+        peak_mean = panel_df.loc[panel_df["is_peak_period"] == 1, "dl_median"].mean()
+        off_mean = panel_df.loc[panel_df["is_peak_period"] == 0, "dl_median"].mean()
+        if pd.notna(peak_mean) and pd.notna(off_mean) and peak_mean >= off_mean:
+            report.warn(
+                "is_peak_period does not match the measured curve: mean dl_median during the "
+                "configured peak window is %.1f Mbps vs %.1f off-peak, i.e. 'peak' hours look no "
+                "worse than the rest of the day. The window (local 08-10, 17-20) is a commuter-hours "
+                "assumption; the measured M-Lab trough for this city is ~19:00-00:00 with no morning "
+                "dip. Consider deriving the peak window from the observed curve instead. This is NOT "
+                "the timezone bug (validate_diurnal_alignment above covers that) — it is a separate, "
+                "milder definitional mismatch.",
+                peak_mean, off_mean,
+            )
+
+
 def validate_targets(targets_df: pd.DataFrame, report: ValidationReport) -> None:
     if "target_is_degraded" in targets_df.columns:
         rate = targets_df["target_is_degraded"].mean()
@@ -210,6 +288,199 @@ def validate_targets(targets_df: pd.DataFrame, report: ValidationReport) -> None
         )
 
     validate_target_anchor_correlation(targets_df, report)
+
+
+def validate_derived_layer_passthrough(static_df: pd.DataFrame, report: ValidationReport) -> None:
+    """
+    Guard against the single most repeated bug in this project: a layer is
+    extracted correctly, then a merge that names the columns to KEEP
+    silently drops the rest.
+
+    It has happened three times:
+      - ESA WorldCover: 11 classes extracted, 7 forwarded. Mangroves (up
+        to 100% of a cell, >10% in 305 coastal cells) vanished, and 480
+        cells ended up with land-cover percentages summing to under 99 —
+        reading as "no data" where the truth was "entirely mangrove".
+      - VIIRS: 6 monthly composites extracted, only their MEAN forwarded.
+        No trace at all downstream; the loss was undetectable from the
+        outputs.
+      - The original VIIRS/WorldCover/Sunway merge: 24 real columns
+        reached cell_static_features and nothing else.
+
+    None of these raised an error. Sums still looked plausible, row counts
+    matched, and the modelling team simply never learned the data existed.
+    This check compares every registered derived layer against the static
+    feature table and fails the build on any column that did not make it,
+    so the failure mode becomes loud instead of silent.
+
+    A column deliberately not forwarded belongs in DERIVED_LAYER_DROP_OK
+    with a reason — an explicit, reviewable decision rather than an
+    accident of a stale keep-list.
+    """
+    from config import DERIVED_LAYERS
+
+    # Columns intentionally not carried into the static table, with why.
+    DERIVED_LAYER_DROP_OK = {
+        # Per-month VIIRS composites: superseded by viirs_avg_rad_mean plus
+        # the viirs_monthly_std / _cv stability columns, which is the whole
+        # of their information at this resolution.
+        "viirs_avg_rad_2024306", "viirs_avg_rad_2024336", "viirs_avg_rad_2025001",
+        "viirs_avg_rad_2025032", "viirs_avg_rad_2025060", "viirs_avg_rad_2025091",
+    }
+
+    present = set(static_df.columns)
+    for key, path in DERIVED_LAYERS.items():
+        if not path.exists():
+            continue
+        try:
+            layer_cols = set(pd.read_parquet(path).columns) - {"h3_index"}
+        except Exception as exc:
+            report.warn("Could not read derived layer %s for the passthrough check (%s).", path.name, exc)
+            continue
+
+        lost = sorted(layer_cols - present - DERIVED_LAYER_DROP_OK)
+        if lost:
+            report.error(
+                "Derived layer '%s' (%s) produces %d column(s) that never reach "
+                "cell_static_features: %s. This is the extract-then-silently-drop bug that has "
+                "already cost this project the mangrove land-cover class and the monthly VIIRS "
+                "composites. Either forward them (merges should exclude, not include) or add them "
+                "to DERIVED_LAYER_DROP_OK with a reason.",
+                key, path.name, len(lost), lost,
+            )
+        else:
+            logger.info(
+                "Derived layer '%s': all %d produced column(s) reach the static features.",
+                key, len(layer_cols),
+            )
+
+
+def validate_derived_layer_freshness(report: ValidationReport) -> None:
+    """
+    Fail the build when a derived layer is OLDER than the extraction it was
+    built from.
+
+    This caught a real bug. After the VIIRS backfill grew the extraction
+    from 6 monthly composites to 43, `merge_layers.py` was never re-run, so
+    static_new_layers_by_h3.parquet still carried 6-month averages and
+    stability columns while viirs_by_h3.parquet held 43 months. Nothing
+    else would have noticed: the column names were identical, the
+    passthrough guard passed, row counts matched, and the values were
+    plausible — just computed from stale input. Only the file timestamps
+    and a value comparison revealed it.
+
+    Timestamps are a blunt instrument, but the failure mode here is
+    exactly "input changed, derivative did not", which mtime detects
+    reliably enough to be worth a hard stop.
+    """
+    from config import DERIVED_LAYERS, PROCESSED_DIR
+
+    # derived layer -> the extraction outputs it is built from
+    UPSTREAM = {
+        "static_new_layers": [PROCESSED_DIR / "viirs_by_h3.parquet",
+                               PROCESSED_DIR / "worldcover_by_h3.parquet"],
+        "sunway_by_h3": [PROCESSED_DIR / "sunway_real_points.parquet"],
+    }
+    for key, sources in UPSTREAM.items():
+        layer = DERIVED_LAYERS.get(key)
+        if layer is None or not layer.exists():
+            continue
+        layer_mtime = layer.stat().st_mtime
+        stale = [s.name for s in sources if s.exists() and s.stat().st_mtime > layer_mtime]
+        if stale:
+            report.error(
+                "Derived layer '%s' (%s) is OLDER than the extraction(s) it is built from: %s. "
+                "It is carrying values computed from superseded input — the column names and row "
+                "counts will look correct, so nothing else catches this. Re-run the merge step "
+                "(scripts/extract/merge_layers.py for static_new_layers, "
+                "src.data_preprocessing.ingest_sunway_real for sunway) before trusting the outputs.",
+                key, layer.name, stale,
+            )
+        else:
+            logger.info("Derived layer '%s' is newer than its inputs — not stale.", key)
+
+
+def validate_relative_targets(panel_df: pd.DataFrame, report: ValidationReport) -> None:
+    """
+    Measure — rather than assert — how much the relative target actually
+    moves over time.
+
+    qoe_target.compute_relative_targets documents that while ONE shared
+    diurnal curve drives the panel, the cross-cell ranking cannot change
+    through the week (a common positive factor does not reorder cells), so
+    target_is_below_area_norm is time-invariant by construction. That claim
+    should be checked against the shipped data every run, not taken on
+    trust, because it stops being true the moment real per-district curves
+    are wired in — and at that point this warning disappearing is the
+    signal that the panel finally carries spatio-temporal information.
+    """
+    col = "target_is_below_area_norm"
+    anchor_col = "qoe_level_is_ookla_anchored"
+    if col not in panel_df.columns or "h3_index" not in panel_df.columns:
+        return
+
+    per_cell_unique = panel_df.groupby("h3_index")[col].nunique()
+    n_cells = len(per_cell_unique)
+    if n_cells == 0:
+        return
+    n_varying = int((per_cell_unique > 1).sum())
+    frac_varying = n_varying / n_cells
+
+    # Aggregate time-variation is NOT evidence of real signal, and reporting
+    # it alone was actively misleading in an earlier version of this check.
+    # Unanchored cells carry a np.random.normal term in their level, which
+    # reshuffles the cross-cell ranking every hour; anchored cells are
+    # deterministic and cannot move. So a healthy-looking aggregate figure
+    # can be almost entirely injected noise. Always split by anchor status.
+    anchored_frac = unanchored_frac = None
+    if anchor_col in panel_df.columns:
+        by_anchor = (
+            panel_df.groupby(["h3_index", anchor_col])[col].nunique().reset_index()
+        )
+        for is_anchored, group in by_anchor.groupby(anchor_col):
+            frac = float((group[col] > 1).mean())
+            if bool(is_anchored):
+                anchored_frac = frac
+            else:
+                unanchored_frac = frac
+
+    if anchored_frac is not None and unanchored_frac is not None and unanchored_frac > 0:
+        ratio = unanchored_frac / max(anchored_frac, 1e-9)
+        if anchored_frac < 0.05 and ratio > 5.0:
+            report.warn(
+                "Relative target '%s' appears to vary over time for %.1f%% of cells overall, but "
+                "that movement is SIMULATION NOISE, not signal: only %.1f%% of Ookla-ANCHORED "
+                "cells ever change state, versus %.1f%% of UNANCHORED cells. Anchored cells are "
+                "deterministic (level x one shared curve), so a common positive factor cannot "
+                "reorder them; unanchored cells carry a np.random.normal term in their level that "
+                "reshuffles the ranking every hour. Do not read the aggregate figure as evidence "
+                "that the panel carries spatio-temporal information — it does not. This resolves "
+                "only when the shape itself varies spatially (real per-district curves) or when a "
+                "genuinely time-varying real source replaces the panel (e.g. multi-quarter Ookla, "
+                "which gives real per-cell change without needing an hourly source).",
+                col, 100 * frac_varying, 100 * anchored_frac, 100 * unanchored_frac,
+            )
+            return
+
+    if frac_varying < 0.01:
+        report.warn(
+            "Relative target '%s' is TIME-INVARIANT for %.1f%% of cells (%d of %d cells never "
+            "change state across the whole week). This is the expected, documented consequence of "
+            "driving every cell with ONE shared diurnal curve: a common positive factor cannot "
+            "reorder cells, so 'below the area norm' collapses to a static property of the cell's "
+            "level. The column is still the correct definition and is exported so the target "
+            "contract is stable — but on THIS panel it carries spatial information only, no "
+            "temporal information.",
+            col, 100 * (1 - frac_varying), n_cells - n_varying, n_cells,
+        )
+    else:
+        logger.info(
+            "Relative target '%s' varies over time for %d of %d cells (%.1f%%), and that variation "
+            "is NOT concentrated in noise-driven unanchored cells (anchored %.1f%% vs unanchored "
+            "%.1f%%) — the panel carries genuine spatio-temporal information.",
+            col, n_varying, n_cells, 100 * frac_varying,
+            100 * (anchored_frac or 0), 100 * (unanchored_frac or 0),
+        )
 
 
 def validate_target_anchor_correlation(targets_df: pd.DataFrame, report: ValidationReport) -> None:
@@ -283,7 +554,11 @@ def run_full_validation(grid_gdf, static_df, panel_df, targets_df=None) -> Valid
     report = ValidationReport()
     validate_grid_geometry(grid_gdf, report)
     validate_static_features(static_df, report)
+    validate_derived_layer_passthrough(static_df, report)
+    validate_derived_layer_freshness(report)
     validate_panel(panel_df, expected_cells=len(grid_gdf), report=report)
+    validate_diurnal_alignment(panel_df, report)
+    validate_relative_targets(panel_df, report)
     if targets_df is not None:
         validate_targets(targets_df, report)
 

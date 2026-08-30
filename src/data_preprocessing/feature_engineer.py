@@ -17,11 +17,66 @@ from config import DEMAND_WEIGHTS, LAG_WARMUP_HOURS, HIGH_LEAKAGE_RISK_FEATURES
 logger = logging.getLogger(__name__)
 
 
-def _minmax(series: pd.Series) -> pd.Series:
-    min_v, max_v = series.min(), series.max()
-    if max_v == min_v:
+# Scaler parameters actually used, recorded so metadata.json can state
+# exactly what was fitted and on which rows — a scaler is part of the data
+# contract, not an implementation detail.
+FITTED_SCALERS = {}
+
+# Fraction of the panel's timestamps used to FIT min/max scalers. Fitting
+# on all rows would let the scaler see the test period, which is a real
+# (if mild) leakage path under the temporal holdout the README recommends.
+SCALER_FIT_FRACTION = 0.80
+
+# How many hours the MEASURED peak window spans. 6 matches the length of
+# the configured commuter window (08-10 + 17-20 = 7h) closely enough for
+# the two to be compared like for like.
+PEAK_WINDOW_HOURS = 6
+
+
+def _minmax(series: pd.Series, fit_mask: pd.Series = None, name: str = None) -> pd.Series:
+    """
+    Min-max scale to [0, 1].
+
+    `fit_mask` restricts which rows the min/max are LEARNED from, while
+    still transforming every row. Under a temporal holdout, fitting on all
+    rows means the scaler has already seen the test period — a genuine
+    leakage path, and the last one remaining in this pipeline after the
+    lag/rolling features were made strictly causal. Values outside the
+    fitted range are clipped to [0, 1] rather than allowed to exceed it,
+    so a test-period extreme cannot silently produce an out-of-range
+    feature.
+
+    Passing no mask fits on everything, which is correct for genuinely
+    static per-cell inputs (there is no temporal split to leak across) and
+    is what compute_demand_pressure_base does.
+    """
+    source = series if fit_mask is None else series[fit_mask]
+    min_v, max_v = source.min(), source.max()
+    if pd.isna(min_v) or pd.isna(max_v) or max_v == min_v:
         return pd.Series(0.5, index=series.index)
-    return (series - min_v) / (max_v - min_v)
+    if name:
+        FITTED_SCALERS[name] = {
+            "min": float(min_v), "max": float(max_v),
+            "fitted_on_rows": int(len(source)), "total_rows": int(len(series)),
+            "fitted_on_all_rows": fit_mask is None,
+        }
+    return ((series - min_v) / (max_v - min_v)).clip(0.0, 1.0)
+
+
+def training_window_mask(panel_df: pd.DataFrame,
+                          fraction: float = SCALER_FIT_FRACTION) -> pd.Series:
+    """
+    Boolean mask selecting the earliest `fraction` of the panel's DISTINCT
+    timestamps — the rows a temporal-holdout model would be allowed to
+    train on. Used to fit scalers without touching the held-out tail.
+    """
+    if "timestamp" not in panel_df.columns:
+        return pd.Series(True, index=panel_df.index)
+    stamps = np.sort(panel_df["timestamp"].unique())
+    if len(stamps) == 0:
+        return pd.Series(True, index=panel_df.index)
+    cutoff = stamps[min(int(len(stamps) * fraction), len(stamps) - 1)]
+    return panel_df["timestamp"] <= cutoff
 
 
 def compute_temporal_shifted_features(panel_df: pd.DataFrame,
@@ -36,10 +91,39 @@ def compute_temporal_shifted_features(panel_df: pd.DataFrame,
     panel_df["hour_of_day"] = panel_df["timestamp"].dt.hour
     panel_df["day_of_week"] = panel_df["timestamp"].dt.dayofweek
     panel_df["is_weekend"] = (panel_df["day_of_week"] >= 5).astype(int)
-    panel_df["is_peak_period"] = (
+    # The commuter-hours ASSUMPTION, always exported under its own name so
+    # the original definition stays available and comparable.
+    panel_df["is_commuter_period"] = (
         (panel_df["is_weekend"] == 0)
         & (panel_df["hour_of_day"].between(8, 10) | panel_df["hour_of_day"].between(17, 20))
     ).astype(int)
+
+    # is_peak_period is now DERIVED FROM THE DATA by default. The commuter
+    # window was never measured — it was assumed, and the real M-Lab curve
+    # contradicts it: mean throughput during 08-10 and 17-20 is no worse
+    # than the rest of the day, because this city's mobile trough is
+    # 19:00-00:00. A feature that names the wrong hours as "peak" quietly
+    # corrupts every peak-vs-offpeak comparison built on it.
+    from config import PEAK_PERIOD_DEFINITION
+    if PEAK_PERIOD_DEFINITION == "measured" and "dl_median" in panel_df.columns:
+        hourly_mean = panel_df.groupby("hour_of_day")["dl_median"].mean()
+        peak_hours = sorted(hourly_mean.nsmallest(PEAK_WINDOW_HOURS).index.tolist())
+        panel_df["is_peak_period"] = panel_df["hour_of_day"].isin(peak_hours).astype(int)
+        panel_df["is_measured_peak_period"] = panel_df["is_peak_period"]
+        logger.info(
+            "is_peak_period DERIVED from the realised curve: hours %s local are the %d "
+            "lowest-throughput hours. The previous hardcoded commuter window (08-10, 17-20) "
+            "is retained separately as is_commuter_period — the measurement does not support "
+            "it as a peak.", peak_hours, PEAK_WINDOW_HOURS,
+        )
+    else:
+        panel_df["is_peak_period"] = panel_df["is_commuter_period"]
+        panel_df["is_measured_peak_period"] = panel_df["is_peak_period"]
+        logger.warning(
+            "is_peak_period is using the COMMUTER ASSUMPTION (config."
+            "PEAK_PERIOD_DEFINITION=%r). The real diurnal curve does not support that "
+            "window as a peak for this city.", PEAK_PERIOD_DEFINITION,
+        )
 
     # Position of each row within its own cell's time series — used to build
     # validity flags without any fill-based workaround.
@@ -158,8 +242,17 @@ def apply_dynamic_demand_adjustments(panel_df: pd.DataFrame, demand_base_df: pd.
 
     peak_multiplier = 1.0 + 0.5 * panel_df["is_peak_period"]
 
+    fit_mask = training_window_mask(panel_df)
     if "lag_24h_rtt_median" in panel_df.columns:
-        historical_qoe_pressure = _minmax(panel_df["lag_24h_rtt_median"].fillna(panel_df["rtt_median"].median()))
+        # Warm-up fill uses the TRAINING window's median of the lag column
+        # itself — not the current-hour rtt_median across the whole panel,
+        # which both leaked the test period and filled a lag feature from a
+        # same-hour column.
+        warmup_fill = panel_df.loc[fit_mask, "lag_24h_rtt_median"].median()
+        historical_qoe_pressure = _minmax(
+            panel_df["lag_24h_rtt_median"].fillna(warmup_fill),
+            fit_mask=fit_mask, name="historical_qoe_pressure",
+        )
     else:
         historical_qoe_pressure = pd.Series(0.0, index=panel_df.index)
 
@@ -189,9 +282,13 @@ def finalize_demand_pressure_index(panel_df: pd.DataFrame) -> pd.DataFrame:
         raise KeyError(f"{col} not found — run the spatial lag pass on demand_pressure_index_pre_spatial first.")
 
     w = DEMAND_WEIGHTS
+    fit_mask = training_window_mask(panel_df)
     combined = (
         (1.0 - w["nearby_demand"]) * panel_df["demand_pressure_index_pre_spatial"]
-        + w["nearby_demand"] * _minmax(panel_df[col]) * 100.0
+        + w["nearby_demand"] * _minmax(panel_df[col], fit_mask=fit_mask,
+                                        name="nearby_demand_spatial_lag") * 100.0
     )
-    panel_df["demand_pressure_index"] = _minmax(combined) * 100.0
+    panel_df["demand_pressure_index"] = _minmax(
+        combined, fit_mask=fit_mask, name="demand_pressure_index"
+    ) * 100.0
     return panel_df

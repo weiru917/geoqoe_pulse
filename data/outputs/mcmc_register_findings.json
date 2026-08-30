@@ -1,0 +1,38 @@
+{
+  "question": "Can the MCMC public apparatus register supply a per-cell capacity feature?",
+  "answer": "No \u2014 for two independent reasons, either of which is sufficient.",
+  "retrieved": "2026-08-30, Hulu Langat, LTE + 5G filters",
+  "reason_1_no_geography": {
+    "finding": "The register publishes no site coordinates, only operator-internal site codes (e.g. 'LGAT(BT14 HULU LANGAT)').",
+    "consequence": "Nothing can be joined to an H3 cell. The finest achievable match is district name \u2014 8 districts across 4,918 cells.",
+    "name_collision_evidence": "A search for the study area's 'SEPANG' returns 'DSBKI0302_TLKSEPANGGAR' \u2014 Telok Sepanggar, Kota Kinabalu, Sabah, ~1,600 km away."
+  },
+  "reason_2_wrong_spectrum": {
+    "finding": "100% of sectors are sub-1 GHz coverage spectrum; 0 are capacity spectrum.",
+    "bands_present": [
+      "Band 20 (800 MHz)",
+      "Band 28 (700 MHz)"
+    ],
+    "consequence": "Coverage spectrum determines reach and building penetration, not throughput. The register contains none of the spectrum that decides speed.",
+    "holds_even_with_coordinates": true
+  },
+  "operator_coverage": {
+    "present": [
+      "DIGITAL NASIONAL BERHAD",
+      "U MOBILE SDN BHD",
+      "YTL COMMUNICATIONS SDN BHD"
+    ],
+    "absent": [
+      "Maxis",
+      "CelcomDigi"
+    ],
+    "note": "The two largest operators by subscriber share do not appear. Their capacity spectrum sits under national Spectrum Assignments with no site-level geography."
+  },
+  "counts": {
+    "sector_rows": 30,
+    "distinct_sites": 10,
+    "sectors_per_site": 3
+  },
+  "supersedes": "The earlier Spearman -0.065 (p=0.69) sector-count-vs-speed test. That correlation rested on district-name matching and its per-cell counts were never persisted. This structural finding is stronger: it does not depend on sample size and is reproducible from a single register search.",
+  "how_to_state_it": "Malaysia's public apparatus register cannot support a capacity feature: it publishes no site coordinates, and the spectrum it does list is sub-1 GHz coverage spectrum from the smaller operators. The bands that determine throughput are held under national assignments with no site-level geography."
+}
