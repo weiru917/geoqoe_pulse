@@ -245,7 +245,11 @@ One caveat to state yourself before anyone asks: 29.9% of Malaysia's mobile user
 
    **(b) It contains none of the spectrum that carries throughput.** Every sector retrieved was **Band 28 (700 MHz)** or **Band 20 (800 MHz)** — sub-1 GHz *coverage* spectrum, which determines reach and building penetration, not speed. Holders were U Mobile, YTL and DNB; **Maxis and CelcomDigi do not appear at all.** Their capacity spectrum (1800/2100/2600 MHz, 5G mid-band) sits under national Spectrum Assignments with no site-level geography.
 
-   Reason (b) is the one to lead with: it holds **even if MCMC published exact coordinates tomorrow**. Evidence in `data/outputs/mcmc_register_findings.json`; reproduce with `python scripts/analysis/check_mcmc_register_bands.py`. The public data cannot support a capacity claim, so we make none.
+   Reason (b) is the one to lead with: it holds **even if MCMC published exact coordinates tomorrow**.
+
+   **Both tiers of the regulator's records were checked, and both fail.** Above the apparatus register sits the national **Spectrum Assignment** register — where Maxis and CelcomDigi do appear (900 MHz, 5–10 MHz paired each, 2017–2032). It has **no geography at all**, not even a site code: assignments are nationwide, so every one of 4,918 cells would receive an identical value. Per-operator bandwidth is real quantity, but Ookla aggregates across operators, and Sunway's operators are anonymised by its authors — so there is nothing to join it to from either direction. Finding the 2600 or 3500 MHz tables would not help: they share the same aspatial structure. In Malaysia spectrum is licensed nationally, and geography exists only at apparatus level, where the capacity bands are absent.
+
+   Evidence in `data/outputs/mcmc_register_findings.json` and `data/raw/mcmc_register/`; reproduce with `python scripts/analysis/check_mcmc_register_bands.py`. The public data cannot support a capacity claim, so we make none.
 
 2. **Demand resolution.** VIIRS gives per-cell quarterly activity; DOSM gives 8 districts annually. VIIRS measures *light* — a proxy for activity, not mobile traffic. Say "associated with rising activity".
 

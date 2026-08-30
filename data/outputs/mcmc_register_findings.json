@@ -1,6 +1,6 @@
 {
   "question": "Can the MCMC public apparatus register supply a per-cell capacity feature?",
-  "answer": "No \u2014 for two independent reasons, either of which is sufficient.",
+  "answer": "No \u2014 verified across BOTH tiers of the regulator's spectrum records. The apparatus register has site codes but only sub-1 GHz coverage spectrum and omits the two largest operators; the national Spectrum Assignment register has the majors but no geography whatsoever.",
   "retrieved": "2026-08-30, Hulu Langat, LTE + 5G filters",
   "reason_1_no_geography": {
     "finding": "The register publishes no site coordinates, only operator-internal site codes (e.g. 'LGAT(BT14 HULU LANGAT)').",
@@ -34,5 +34,16 @@
     "sectors_per_site": 3
   },
   "supersedes": "The earlier Spearman -0.065 (p=0.69) sector-count-vs-speed test. That correlation rested on district-name matching and its per-cell counts were never persisted. This structural finding is stronger: it does not depend on sample size and is reproducible from a single register search.",
-  "how_to_state_it": "Malaysia's public apparatus register cannot support a capacity feature: it publishes no site coordinates, and the spectrum it does list is sub-1 GHz coverage spectrum from the smaller operators. The bands that determine throughput are held under national assignments with no site-level geography."
+  "how_to_state_it": "Malaysia's public apparatus register cannot support a capacity feature: it publishes no site coordinates, and the spectrum it does list is sub-1 GHz coverage spectrum from the smaller operators. The bands that determine throughput are held under national assignments with no site-level geography.",
+  "national_spectrum_assignment_register": {
+    "what_it_is": "MCMC's national Spectrum Assignment register \u2014 the tier above the apparatus register, where the major operators' spectrum actually sits.",
+    "sample_retrieved": "900 MHz band (Band 8), all four assignment holders, 2026-08-30. Raw rows in data/raw/mcmc_register/national_spectrum_assignments_900mhz.csv",
+    "confirms": "The claim that Maxis and CelcomDigi hold spectrum under national assignments with no site-level geography. Both appear here and in neither apparatus search.",
+    "why_still_unusable": [
+      "NO GEOGRAPHY AT ALL \u2014 not even a site code. Assignments are nationwide for 2017-2032. Joined to the grid, every one of 4,918 cells receives an identical value: a constant column with zero information.",
+      "Per-operator bandwidth (5-10 MHz paired) is real quantity, but Ookla aggregates across operators so there is nothing to join it to. Sunway has per-operator data, but the operators are anonymised by its authors, so they cannot be mapped to licence holders.",
+      "This band is 900 MHz (Band 8) \u2014 sub-1 GHz coverage spectrum again."
+    ],
+    "why_finding_the_capacity_band_tables_would_not_help": "The 1800/2100/2600/3500 MHz assignment tables have the same structure: national, aspatial. The blocker is not which band \u2014 spectrum in Malaysia is licensed nationally, and geography appears only at apparatus level, where the capacity bands are absent. Both tiers fail, for different reasons, and no combination of them yields a per-cell capacity value."
+  }
 }
