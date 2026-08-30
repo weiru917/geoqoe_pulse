@@ -1,3 +1,0 @@
-split,normal_to_normal,normal_to_degraded,degraded_to_normal,degraded_to_degraded,same_state_rate
-training,899812,408,408,19172,0.9991128506196999
-validation,189462,0,0,3696,1.0
