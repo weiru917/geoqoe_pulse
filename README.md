@@ -457,3 +457,23 @@ Full technical detail on every pipeline stage, feature, and design decision
 lives in `src/modelling/` reports, `Trained AI Model/GeoQoE_AI/README.md`,
 and `dashboard/build/README.md` for anyone who wants to go deeper than
 this overview.
+
+## Finals Quarterly AI Forecast
+
+The finals GeoQoE Pulse prototype uses a real quarterly XGBoost early-warning model to rank currently-normal H3 cells by their risk of falling into the bottom 25% of Klang Valley download performance in the following quarter.
+
+Final model:
+
+`models/finals_quarterly/final_xgb_full_v1.0.0.json`
+
+AI handover:
+
+`handoff/finals_ai/README.md`
+
+Technical model card:
+
+`handoff/finals_ai/MODEL_CARD.md`
+
+Frontend integration guide:
+
+`handoff/finals_ai/FRONTEND_INTEGRATION.md`

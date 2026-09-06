@@ -1,0 +1,21 @@
+{
+  "package_version": "1.0.0",
+  "model_version": "finals_quarterly_onset_v1.0.0",
+  "predictor_quarter": "2026Q1",
+  "forecast_quarter": "2026Q2",
+  "eligible_cells": 2186,
+  "risk_policy": {
+    "high": "Top 50 currently-normal cells",
+    "elevated": "Ranks 51\u2013200",
+    "lower": "Ranks 201 and below"
+  },
+  "risk_score_note": "The XGBoost output is used for relative ranking and must not be displayed as a calibrated probability.",
+  "measurement_support_note": "Measurement support is based on the number of Ookla tests contributing to the cell-quarter measurement. It is a relative evidence indicator, not an accuracy guarantee.",
+  "explanation_note": "SHAP contributors explain model behaviour and must not be described as proven causes of degradation.",
+  "time_machine_categories": {
+    "correctly_anticipated": "Top-200 flagged cell that actually became underperforming",
+    "false_alert": "Top-200 flagged cell that did not become underperforming",
+    "missed": "Lower-risk cell that later became underperforming",
+    "correctly_lower_risk": "Lower-risk cell that remained outside the underperforming group"
+  }
+}
