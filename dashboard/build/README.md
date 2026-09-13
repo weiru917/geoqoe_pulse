@@ -1,5 +1,20 @@
 # GeoQoE Pulse — Dashboard
 
+> **Active AI integration:** the dashboard now uses the frozen quarterly finals
+> package (`2026Q1 → 2026Q2`) plus a separate real 2026Q1 observed-status layer.
+> The older next-hour files under `ai_model/`, `data/onset_model.json`,
+> `data/model_card.json`, and `build_onset_data.py` are retained for provenance
+> only and are not loaded by the current dashboard.
+
+The validated default workflow is **REVEAL → ANTICIPATE → EXPLAIN →
+PRIORITISE**: reveal observed 2026Q1 underperformance, anticipate emerging
+2026Q2 risk among currently-normal cells, explain the assessment with SHAP
+contributors plus context and measurement support, then prioritise where to
+investigate. Contributors and dashboard heuristics are investigation evidence,
+not diagnosed root causes. VIIRS is a human-activity proxy, not real network
+demand. Hourly M-Lab / `cell_time_dataset` views are separate and labelled
+**Demo / Scenario**.
+
 A standalone HTML/CSS/JS dashboard (Leaflet + Plotly, Bootstrap for layout)
 built directly on the **real** geoqoe_pulse pipeline output — real Ookla,
 OpenCellID, Google Open Buildings, OpenStreetMap, WorldPop, OpenDOSM, and
@@ -10,27 +25,27 @@ onset XGBoost model, both evaluated on real held-out data. See section 1b.
 
 ## 0. Placement
 
-This folder is meant to sit as `dashboard/` inside your existing
-`geoqoe_pulse` repo, alongside `data/`, `src/`, `config.py`, etc. — it's
+This folder sits at `dashboard/build/` inside the
+`geoqoe_pulse` repo; its build script resolves inputs from the repository root — it's
 already been generated once against your real pipeline output, so:
 
 - **Just want to view it?** `data/*.json` here are already built from your
   real data (including the AI model outputs — see section 1b). Skip
   straight to section 2 ("Run it") — no repo needed.
-- **Want to regenerate after re-running the pipeline?** Unzip this folder so
-  it replaces/sits at `geoqoe_pulse/dashboard/`, then follow section 1.
+- **Want to regenerate after re-running the pipeline?** Keep it at
+  `geoqoe_pulse/dashboard/build/`, then follow section 1.
 
 ## 1. Generate the data (only needed if you've re-run the pipeline)
 
 ```bash
-cd geoqoe_pulse/dashboard
+cd geoqoe_pulse/dashboard/build
 python3 build_dashboard_data.py
 ```
 
 This reads `data/outputs/cell_static_features.parquet`,
 `data/outputs/cell_time_dataset.parquet`, `data/processed/grid_geometry.geojson`
-and `data/outputs/metadata.json` from the repo root, and writes four files into
-`dashboard/data/`:
+and `data/outputs/metadata.json` from the repo root, and writes the active files into
+`dashboard/build/data/`:
 
 | File | What it is | Size |
 |---|---|---|
@@ -38,6 +53,9 @@ and `data/outputs/metadata.json` from the repo root, and writes four files into
 | `panel.json` | Full hourly panel (4,918 cells x 168 hours), columnar | ~54 MB |
 | `city_timeseries.json` | Pre-aggregated city-wide stats per hour, for the trend charts | ~20 KB |
 | `summary_stats.json` | Provenance, KPI constants, disclaimer text | <1 KB |
+| `quarterly_observed_2026Q1.geojson` | Real 2026Q1 observed status and network measurements | ~4 MB |
+| `finals_quarterly.geojson` | Frozen finals AI forecast and held-out outcome fields | ~6 MB |
+| `finals_metadata.json` | Model version, risk policy, metrics and explanation metadata | <10 KB |
 
 **Why a conversion script at all, instead of reading parquet directly in the
 browser:** this sandbox had no network access and neither `pyarrow` nor
@@ -54,7 +72,7 @@ If you have `pyarrow` available in your own environment, feel free to swap
 `pyparquet_min.read_parquet` for `pandas.read_parquet` in
 `build_dashboard_data.py` — the rest of the pipeline is unaffected.
 
-## 1b. The trained AI model layer (new)
+## 1b. Legacy next-hour AI layer (retained, inactive)
 
 `ai_model/` is the unzipped **frozen competition package** from the
 `GeoQoE_AI` project — a real, already-trained static spatial QoE ensemble
@@ -124,9 +142,9 @@ already-computed numbers — nothing here is a new model or a new data file:
   elevated risk or currently degraded, the map popup now shows the
   city-wide z-score of that cell's real RTT/jitter/loss/demand-pressure at
   the AI snapshot hour (🔴 very high / 🟠 elevated / 🟢 normal), plus the
-  hour-over-hour QoE change, plus a one-line "Likely trigger" sentence
-  built from the same rule-based cause categorization already used in
-  Root Cause / Interventions. This is a computed abnormality explanation,
+  hour-over-hour QoE change, plus a one-line possible-driver statement
+  built from the same rule-based categorization used in
+  Investigation Evidence / Interventions. This is a computed scenario cue,
   not a fabricated SHAP value.
 - **Risk score vs. probability, made hard to miss.** Every onset score now
   carries an inline "— NOT a %" tag, and a new **Model behavior** badge on
@@ -212,10 +230,10 @@ states this plainly, and relevant panel headers carry a
 REAL / SIMULATED / HEURISTIC badge so it's never ambiguous which you're
 looking at.
 
-The **Root Cause** breakdown and **Interventions** ranking's dominant-cause
-label are a heuristic computed client-side from real static features (tower
+The **Investigation Evidence** breakdown and **Interventions** ranking's possible-driver
+label are a Demo / Scenario heuristic computed client-side from static features (tower
 distance, built-up ratio, latency vs. demand, sample confidence) — the
-pipeline itself exports no `likely_cause` column. The **cost estimates** and
+pipeline itself exports no diagnosed-cause column. The **cost estimates** and
 **operator contact** lines on intervention cards are explicitly-labelled
 editable placeholders (`ILLUSTRATIVE_COST_RANGES` / `OPERATOR_CONTACTS` at the
 top of `dashboard.js`) — this dataset has no real per-cell operator
@@ -225,7 +243,7 @@ numbers and presents them as measured.
 ## 4. Feature tour
 
 - **Time slider + Play button** — scrub or animate through all 168 hours; the
-  map, KPIs, hotspot lists, root cause, and interventions all update live.
+  Demo / Scenario map, KPIs, hotspot lists, investigation evidence, and interventions all update live.
 - **Trend range** (dual slider under the charts) — select a multi-hour window
   for the range summary (avg QoE, total degraded cell-hours, worst hour)
   independent of the single "current hour" used by the map. Hourly/Daily

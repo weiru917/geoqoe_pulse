@@ -5,8 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GeoQoE Pulse — Dynamic Mobile QoE &amp; Demand Pressure Intelligence</title>
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
@@ -14,7 +18,7 @@
 <!-- ===================== HEADER ===================== -->
 <header class="app-header">
   <div class="header-left">
-    <div class="logo-mark">📡</div>
+    <div class="logo-mark" aria-hidden="true"><span></span><span></span><span></span></div>
     <div>
       <div class="logo-title">GeoQoE Pulse</div>
       <div class="logo-subtitle">Dynamic Mobile QoE &amp; Demand Pressure Intelligence System</div>
@@ -24,6 +28,7 @@
   <div class="header-center">
     <div class="region-badge" id="regionBadge">Klang Valley</div>
     <div class="time-control">
+      <span class="timeline-label" id="scenarioTimelineLabel">Scenario timeline <small id="scenarioTimelineHint">Drag to inspect hourly change</small></span>
       <button id="playBtn" class="icon-btn" title="Play through time">▶</button>
       <input type="range" id="timeSlider" min="0" max="167" value="167" step="1">
       <div id="timeLabel" class="time-label">—</div>
@@ -31,13 +36,17 @@
   </div>
 
   <div class="header-right">
-    <button id="exportReportBtn" class="btn btn-sm btn-outline-light">📄 Export Executive Summary</button>
-    <button id="darkModeToggle" class="icon-btn" title="Toggle dark mode">🌙</button>
+    <button id="guidedDemoBtn" class="btn btn-sm btn-light">Start guided demo</button>
+    <button id="exportReportBtn" class="btn btn-sm btn-outline-light">Export briefing</button>
+    <button id="darkModeToggle" class="icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode">◐</button>
     <div class="live-indicator" id="liveIndicator">
       <span class="dot"></span> Scenario data as of —
     </div>
   </div>
 </header>
+
+<aside class="guided-demo-popover d-none" id="guidedDemoPopover" role="status" aria-live="polite"></aside>
+<div class="guided-demo-backdrop d-none" id="guidedDemoBackdrop" aria-hidden="true"></div>
 
 <!-- ===================== HELP / LEGEND STRIP ===================== -->
 <section class="help-strip">
@@ -47,13 +56,13 @@
   <div class="data-cheat-sheet">
     <span class="cheat-badge real">🟢 REAL</span> static GIS (towers, buildings, roads, POIs, population), Ookla-anchored cells, Gi*/Moran spatial stats
     <span class="cheat-badge sim">🟡 SIMULATED</span> hourly QoE/throughput/latency shape (documented scenario, see Trust panel)
-    <span class="cheat-badge ai">🤖 AI MODEL</span> trained &amp; evaluated onset/static models, frozen single-hour snapshot (see AI Model panel)
+    <span class="cheat-badge ai">🤖 AI MODEL</span> finals quarterly emerging-risk ranking (2026Q1 context → 2026Q2 outcome; see AI Model panel)
   </div>
   <div class="collapse" id="howToUse">
     <ol class="howto-list">
       <li><b>Time slider</b> (top) sets the hour shown on the map and KPI cards. <b>▶ Play</b> animates through all 168 hours.</li>
       <li><b>Trend range</b> (below the charts) lets you select a multi-hour window to aggregate — drag either handle, or pick Hourly/Daily granularity.</li>
-      <li><b>Color by</b> dropdown changes what the map hexes encode — QoE, demand pressure, hotspot class, Moran cluster, historical next-hour risk, or the two <b>🤖 trained AI model</b> layers (onset risk / static DL estimate — see below).</li>
+      <li><b>Color by</b> changes what the map hexes encode — QoE, scenario demand pressure, hotspot class, Moran cluster, historical scenario outcome, or the <b>🤖 quarterly emerging-risk</b> ranking.</li>
       <li><b>Profile</b> dropdown reweights the QoE score for a specific use case (video calling / gaming / streaming) — see the note under the dropdown for exactly what changed and why.</li>
       <li><b>🪄 What-if</b> box: simulate adding or removing network capacity and watch the map/KPIs recompute in real time — uses the pipeline's own demand-elasticity coefficients, not an invented guess (see its disclaimer).</li>
       <li><b>🔎 Search</b> above the map finds a cell by place name (e.g. "Cyberjaya", "Bangsar") or H3 index — type 2+ characters, pick a result, or press Enter/click Go to jump to the top match.</li>
@@ -64,7 +73,7 @@
       <li>The <b>(?)</b> icon next to "Spatial-Temporal Hotspots" explains what Gi* and Moran's I actually mean, in plain language.</li>
       <li>Click any ranked-list row, intervention card, or chart point to jump the map to that hour/cell.</li>
       <li>Everything under <b>🧪 Data Quality &amp; Trust</b> tells you exactly what's a real measurement vs. a documented simulation — read that before quoting a number.</li>
-      <li>The <b>🤖 Trained AI Model</b> panel shows a real, already-trained model's output — a static spatial QoE estimator and a next-hour degradation-onset ranker — for a single frozen hour (not animated by the time slider). Click "Model Info" for validated precision/recall and stated limitations before quoting a risk score as a probability.</li>
+      <li>The <b>🤖 AI Forecast</b> panel ranks currently non-underperforming cells for emerging underperformance in the following quarter. It is independent of scenario-playback time and its ranks are not probabilities. Open Model Info before quoting a result.</li>
     </ol>
   </div>
 </section>
@@ -72,10 +81,11 @@
 <!-- ===================== VIEW MODE TOGGLE + EXECUTIVE OVERVIEW ===================== -->
 <section class="exec-overview-section">
   <div class="view-toggle">
-    <button id="viewModeOverviewBtn" class="view-toggle-btn" onclick="setViewMode('overview')">Overview</button>
-    <button id="viewModeFullBtn" class="view-toggle-btn active" onclick="setViewMode('full')">Full Dashboard</button>
-    <span class="panel-hint">Overview = the 30-second answer for a manager. Full Dashboard = everything below, for analysts.</span>
+    <button id="viewModeOverviewBtn" class="view-toggle-btn active" onclick="setViewMode('command')">Command view</button>
+    <button id="viewModeFullBtn" class="view-toggle-btn" onclick="setViewMode('analyst')">Analyst view</button>
+    <span class="panel-hint"><b>REVEAL → ANTICIPATE → EXPLAIN → PRIORITISE</b>. Quarterly real data is the validated default.</span>
   </div>
+  <div class="guided-demo-banner d-none" id="guidedDemoBanner" role="status"></div>
   <div class="exec-overview-grid" id="execOverviewGrid">
     <!-- populated by dashboard.js: renderExecOverview() -->
   </div>
@@ -89,117 +99,185 @@
   </div>
 </section>
 
-<div class="main-grid full-dashboard-only">
+<div class="main-grid command-mode" id="mainWorkspace">
+
+ <aside class="workspace-tool-rail" aria-label="Analysis tools">
+  <button class="workspace-tool active" data-workspace-tool="overview" onclick="setWorkspaceTool('overview')"><span><i class="bi bi-grid-1x2"></i></span><b>Reveal</b></button>
+  <button class="workspace-tool" data-workspace-tool="compare" onclick="setWorkspaceTool('compare')"><span><i class="bi bi-columns-gap"></i></span><b>Compare</b></button>
+  <button class="workspace-tool" data-workspace-tool="hotspots" onclick="setWorkspaceTool('hotspots')"><span><i class="bi bi-bullseye"></i></span><b>Hotspots</b></button>
+  <button class="workspace-tool ai-tool" data-workspace-tool="ai" onclick="setWorkspaceTool('ai')"><span><i class="bi bi-cpu"></i></span><b>AI Forecast</b></button>
+  <button class="workspace-tool" data-workspace-tool="rootcause" onclick="setWorkspaceTool('rootcause')"><span><i class="bi bi-diagram-3"></i></span><b>Explain</b></button>
+  <button class="workspace-tool" data-workspace-tool="actions" onclick="setWorkspaceTool('actions')"><span><i class="bi bi-list-check"></i></span><b>Prioritise</b></button>
+  <button class="workspace-tool" data-workspace-tool="trust" onclick="setWorkspaceTool('trust')"><span><i class="bi bi-shield-check"></i></span><b>Trust</b></button>
+  <button class="workspace-tool" data-workspace-tool="more" onclick="toggleMoreTools(event)"><span><i class="bi bi-three-dots"></i></span><b>More tools</b></button>
+  <div class="more-tools-popover d-none" id="moreToolsPopover"><span>More tools</span><button onclick="setWorkspaceTool('timeseries')"><i class="bi bi-graph-up"></i> Time-series</button><button onclick="setWorkspaceTool('comparison')"><i class="bi bi-intersect"></i> AI vs Scenario Hotspots</button><button onclick="setWorkspaceTool('whatif')"><i class="bi bi-sliders"></i> What-if simulation</button></div>
+ </aside>
+
+ <section class="panel workspace-overview-panel" id="workspaceOverviewPanel" style="display:block !important">
+  <div class="workspace-panel-title"><span>Quarterly status</span><span class="cheat-badge real">REAL QUARTERLY DATA</span></div>
+  <div class="workspace-overview-story"><span>Current observed issues</span><i class="bi bi-arrow-right"></i><span>Future AI risk</span><i class="bi bi-arrow-right"></i><span>Top priority location</span></div>
+  <div class="workspace-overview-grid" id="workspaceOverviewGrid"></div>
+  <div class="workspace-additional-metrics" id="workspaceAdditionalMetrics"></div>
+  <div class="workspace-panel-title workspace-priority-title">Top priority location</div>
+  <div id="workspaceTopPriority" class="workspace-top-priority"></div>
+  <div class="workspace-hourly-secondary">
+    <div class="workspace-panel-title"><span>Hourly Pulse</span><span class="cheat-badge sim">DEMO / SCENARIO</span></div>
+    <div id="workspacePulseMeta" class="workspace-pulse-meta"></div>
+    <div class="workspace-pulse-actions"><span id="workspacePulseSelectedTime"></span><button id="workspacePulseLatest" type="button" onclick="showLatestWorkspacePulse()">Latest</button></div>
+    <div id="workspacePulseChart" class="workspace-pulse-chart"></div>
+    <div class="workspace-pulse-navigator-help"><span>Drag the range below to explore earlier hours</span><b id="workspacePulseVisibleRange"></b></div>
+    <div id="workspaceOverviewNote" class="workspace-overview-note"></div>
+  </div>
+  <div id="workspaceSelectedCell" class="workspace-selected-cell"></div>
+ </section>
+
+ <section class="panel workspace-more-panel" id="workspaceMorePanel">
+  <div class="workspace-panel-title">More tools</div>
+  <p class="panel-hint">Open deeper analysis without losing geographic context.</p>
+  <div class="more-tool-list">
+   <button data-workspace-tool="timeseries" onclick="setWorkspaceTool('timeseries')">Time-series analysis <span>→</span></button>
+   <button data-workspace-tool="whatif" onclick="setWorkspaceTool('whatif')">What-if capacity simulation <span>→</span></button>
+  </div>
+ </section>
+
+ <section class="analysis-stage" id="analysisStage" aria-live="polite"></section>
+ <div class="workspace-resize-handle" id="workspaceResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize analysis and map panels" tabindex="0"><span></span></div>
 
  <div class="main-col main-col-left">
 
   <!-- ===================== MAP PANEL ===================== -->
   <section class="panel map-panel">
-    <div class="panel-header">
-      <h2>Live QoE Map <span class="cheat-badge sim">SIM</span></h2>
+    <div class="map-ambient" aria-hidden="true">
+      <span class="ambient-glow glow-one"></span><span class="ambient-glow glow-two"></span>
+      <span class="ambient-dot dot-one"></span><span class="ambient-dot dot-two"></span><span class="ambient-dot dot-three"></span><span class="ambient-dot dot-four"></span>
+      <span class="ambient-sparkle sparkle-one">✦</span><span class="ambient-sparkle sparkle-two">✧</span>
     </div>
-
-    <div class="map-toolbar">
-      <div class="map-toolbar-group">
-        <span class="toolbar-label">Display</span>
-        <select id="colorBySelect" class="form-select form-select-sm">
-          <option value="qoe">QoE Score (0–100)</option>
+    <div class="map-ui-header">
+      <div class="map-ui-title"><h2>Network map</h2><span id="mapDataContextBadge">Observed + AI · quarterly</span></div>
+      <div class="map-control-toolbar">
+        <div class="map-search-control" aria-label="Search place or cell">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <input type="text" id="placeSearchInput" list="placeSearchList" placeholder="Search place or cell..." autocomplete="off">
+          <datalist id="placeSearchList"></datalist>
+          <button id="placeSearchBtn" class="map-search-clear" aria-label="Clear search" title="Clear search"><i class="bi bi-x"></i></button>
+          <div id="placeSearchResults" class="place-search-results d-none"></div>
+        </div>
+        <details class="map-layers-popover map-control-menu">
+          <summary><i class="bi bi-layers"></i><span>Layers</span><i class="bi bi-chevron-down"></i></summary>
+          <div class="map-control-popover">
+            <strong>Map layers</strong>
+            <label class="map-layer-choice"><span>Basemap</span><select id="basemapSelect" class="form-select form-select-sm"><option value="labels">Standard with labels</option><option value="light">Light</option></select></label>
+            <label class="map-layer-toggle" title="Show or hide blue tower markers"><input type="checkbox" id="toggleTowers"><span>Cell towers</span></label>
+            <label class="map-layer-toggle"><input type="checkbox" id="toggleWeather"><span>Rain radar <small>Live context</small></span></label>
+          </div>
+        </details>
+        <details class="map-overflow-popover map-control-menu">
+          <summary aria-label="More map settings" title="More map settings"><i class="bi bi-three-dots"></i></summary>
+          <div class="map-control-popover map-overflow-content">
+            <strong>More map settings</strong>
+            <label class="map-layer-choice"><span class="map-setting-select-label">Detailed lens <i class="bi bi-chevron-down" aria-hidden="true"></i></span>
+        <span class="map-select-wrap"><select id="colorBySelect" class="form-select form-select-sm">
+          <option value="qoe">Demo / Scenario QoE Score (0–100)</option>
           <option value="demand">Demand Pressure Index (0–100)</option>
           <option value="hotspot">Hotspot Classification (Gi*)</option>
           <option value="moran">Local Moran's I Cluster</option>
-          <option value="risk">Next-Hour Risk (historical outcome)</option>
-          <option value="onset">🤖 AI Onset Risk (latest hour, trained model)</option>
-          <option value="static_ai">🤖 AI Static DL Estimate (observed + AI-estimated)</option>
-          <option value="comparison">🔍 AI vs Traditional Hotspot</option>
-        </select>
-        <select id="profileSelect" class="form-select form-select-sm" title="Re-weights the composite QoE formula for a specific use case">
+          <option value="risk">Historical scenario outcome</option>
+          <option value="onset" selected>Quarterly observed + emerging risk</option>
+        </select></span></label>
+            <label class="map-layer-choice"><span class="map-setting-select-label">QoE profile <i class="bi bi-chevron-down" aria-hidden="true"></i></span><select id="profileSelect" class="form-select form-select-sm" title="Re-weights the composite QoE formula for a specific use case">
           <option value="balanced">Profile: Balanced (pipeline default)</option>
           <option value="video">Profile: Video Calling</option>
           <option value="gaming">Profile: Gaming</option>
           <option value="streaming">Profile: Streaming</option>
-        </select>
-      </div>
-      <div class="map-toolbar-group">
-        <span class="toolbar-label">Map style</span>
-        <select id="basemapSelect" class="form-select form-select-sm">
-          <option value="labels">Standard (labels)</option>
-          <option value="light">Light (Carto)</option>
-        </select>
-        <label class="chk-inline"><input type="checkbox" id="toggleTowers"> Towers</label>
-        <label class="chk-inline"><input type="checkbox" id="toggleWeather"> Rain radar (live)</label>
-      </div>
-      <div class="map-toolbar-group">
-        <span class="toolbar-label">Tools</span>
-        <button id="compareToggleBtn" class="btn btn-sm btn-outline-primary">Compare cells</button>
+        </select></label>
+            <div class="profile-note" id="profileNote"></div>
+            <div class="confidence-filter"><label for="confidenceFilter">Minimum list confidence <b id="confidenceFilterLabel">0%</b></label><input type="range" id="confidenceFilter" min="0" max="100" value="0" step="5"><small>Raise this to hide lower-confidence cells from ranked lists and show only results meeting the selected threshold. Map cells and underlying data are unchanged.</small></div>
+          </div>
+        </details>
       </div>
     </div>
-
-    <div class="map-search-row">
-      <span class="search-icon">🔎</span>
-      <input type="text" id="placeSearchInput" list="placeSearchList" class="form-control form-control-sm"
-             placeholder="Search a place name (e.g. Cyberjaya, Bangsar) or H3 index…" autocomplete="off">
-      <datalist id="placeSearchList"></datalist>
-      <button id="placeSearchBtn" class="btn btn-sm btn-primary">Go</button>
+    <div class="map-primary-controls" role="group" aria-label="Primary map lens">
+      <button class="map-mode-btn" data-map-mode="qoe">QoE</button>
+      <button class="map-mode-btn" data-map-mode="demand">Demand</button>
+      <button class="map-mode-btn" data-map-mode="hotspot">Hotspots</button>
+      <button class="map-mode-btn ai-mode active" data-map-mode="onset">Quarterly</button>
     </div>
-    <div id="placeSearchResults" class="place-search-results d-none"></div>
-
-    <div class="profile-note" id="profileNote"></div>
-
-    <div class="map-advanced-row">
-      <div class="confidence-filter">
-        <label for="confidenceFilter">Min. confidence (hides low-sample cells from lists, not the map): <b id="confidenceFilterLabel">0%</b></label>
-        <input type="range" id="confidenceFilter" min="0" max="100" value="0" step="5">
-      </div>
-      <div class="whatif-box">
+    <div class="whatif-box map-whatif-storage">
         <div class="whatif-header">
-          <label><input type="checkbox" id="whatIfEnabled"> 🪄 What-if: simulate capacity change</label>
-          <span class="cheat-badge heuristic">MODEL-BASED ESTIMATE</span>
+          <label><input type="checkbox" id="whatIfEnabled"> What-if capacity plan</label>
+          <span class="cheat-badge heuristic">ILLUSTRATIVE WHAT-IF</span>
         </div>
+        <p class="whatif-intro">Test a capacity increase or reduction against the current scenario hour.</p>
         <div class="whatif-controls">
           <input type="range" id="whatIfSlider" min="-50" max="100" value="20" step="5" disabled>
           <span id="whatIfLabel">+20% capacity</span>
         </div>
         <div id="whatIfSummary" class="text-summary"></div>
-        <div class="whatif-disclaimer">Uses the pipeline's own demand-elasticity coefficients from <code>data_downloader.py</code> applied to observed dl/rtt — a documented planning approximation, not an exact inverse of the stochastic generator. See Data Quality panel.</div>
-      </div>
+        <div id="whatIfExplanation" class="whatif-explanation"></div>
+        <div class="whatif-disclaimer">Illustrative planning approximation based on documented scenario elasticity assumptions. Not a field-validated prediction of real intervention impact.</div>
     </div>
-
+    <div class="map-selected-bar d-none" id="mapSelectedBar"></div>
     <div id="map"></div>
-    <div class="map-legend" id="mapLegend"></div>
+    <div class="map-below-area">
+      <div class="map-legend" id="mapLegend"></div>
+      <div class="map-workspace-insight" id="mapWorkspaceInsight" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section class="panel selected-area-panel" id="selectedAreaPanel">
+    <div class="panel-header"><h2>Cell Intelligence</h2></div>
+    <div class="insight-tabs" role="tablist">
+      <button class="insight-tab active" data-insight-tab="overview"><i class="bi bi-record-circle"></i> Reveal</button>
+      <button class="insight-tab" data-insight-tab="ai"><i class="bi bi-stars"></i> AI Forecast</button>
+      <button class="insight-tab" data-insight-tab="cause"><i class="bi bi-diagram-3"></i> Explain</button>
+      <button class="insight-tab" data-insight-tab="action"><i class="bi bi-lightning-charge"></i> Prioritise</button>
+      <button class="insight-tab" data-insight-tab="data"><i class="bi bi-database"></i> Details</button>
+    </div>
+    <div id="selectedAreaBody" class="selected-area-body"></div>
   </section>
 
   <!-- ===================== HOTSPOT PANEL ===================== -->
-  <section class="panel hotspot-panel">
-    <div class="panel-header"><h2>🔥 Spatial-Temporal Hotspots <span class="cheat-badge sim">SIM</span>
+  <section class="panel hotspot-panel" id="hotspotPanel">
+    <div class="panel-header"><h2><i class="bi bi-bullseye page-title-icon"></i> Spatial-Temporal Hotspots <span class="cheat-badge sim">DEMO / SCENARIO</span>
       <button class="info-icon" data-bs-toggle="modal" data-bs-target="#spatialStatsModal" title="What do Gi* and Moran's I mean?">?</button>
-    </h2></div>
+    </h2><span class="panel-hint">Hourly scenario patterns at the selected timeline hour.</span><div class="hotspot-view-toggle"><button class="btn btn-sm btn-outline-primary" onclick="setHotspotMapView()">Gi* map</button><button class="btn btn-sm btn-outline-primary" onclick="setMoranMapView()">Local Moran's I map</button><button class="btn btn-sm btn-primary">List view</button></div></div>
+    <section class="hotspot-method-section"><h3>Spatial Hotspot Summary</h3><p class="hotspot-explainer spatial-map-hint"><b>Local Moran's I:</b> identifies statistically significant clusters and spatial outliers relative to neighbouring cells. This is not simply a list of low QoE values.</p></section>
+    <div id="moranSummary" class="moran-summary" aria-label="Local Moran's I classification summary"></div>
     <div class="hotspot-grid">
       <div>
-        <h3>Worst QoE right now</h3>
+        <h3>Lowest scenario QoE</h3>
+        <p class="hotspot-explainer">Lowest QoE values at the selected scenario hour, regardless of spatial significance.</p>
         <ol id="worstQoeList" class="ranked-list"></ol>
       </div>
       <div>
-        <h3>Highest demand pressure</h3>
+        <h3>Highest scenario pressure</h3>
+        <p class="hotspot-explainer">Ranks the highest current demand-pressure index. These are places where network load is most likely to become constrained.</p>
         <ol id="highDemandList" class="ranked-list"></ol>
       </div>
       <div>
         <h3>Persistent hotspot watch (HH ≥ 3 recent hours)</h3>
+        <p class="hotspot-explainer">Ranks cells confirmed as high-high spatial hotspots for at least three of the last six hours, highlighting sustained rather than one-off issues.</p>
         <ol id="persistentList" class="ranked-list"></ol>
       </div>
       <div>
         <h3>Emerging (QoE ↓ &gt;20% in 2h, not yet HH)</h3>
+        <p class="hotspot-explainer">Ranks the steepest two-hour QoE deterioration before a cell becomes a confirmed high-high hotspot, making it an early-warning list.</p>
         <ol id="emergingList" class="ranked-list"></ol>
       </div>
     </div>
   </section>
 
-  <!-- ===================== ROOT CAUSE PANEL ===================== -->
-  <section class="panel rootcause-panel">
-    <div class="panel-header"><h2>🧭 Root Cause Breakdown <span class="cheat-badge heuristic">HEURISTIC</span></h2>
-      <span class="panel-hint">City-wide, degraded cells at the selected hour · computed client-side from real features, not a pipeline output</span>
+  <!-- ===================== INVESTIGATION EVIDENCE PANEL ===================== -->
+  <section class="panel rootcause-panel" id="rootCausePanel">
+    <div class="panel-header"><h2><i class="bi bi-diagram-3 page-title-icon"></i> Investigation Evidence <span class="cheat-badge sim">DEMO / SCENARIO</span></h2>
+      <span class="panel-hint">Relative investigation signals for the selected scenario hour; validate with field or operator evidence.</span>
     </div>
+    <div class="evidence-overview"><div><span>Degraded scenario cells</span><b id="rootCauseCellCount">—</b></div><div><span>No strong relative signal</span><b id="rootCauseNoSignal">—</b></div></div>
+    <section class="measurement-support-panel"><h3>Scenario measurement support</h3><div id="rootCauseSupport" class="measurement-support-grid"></div></section>
+    <p class="evidence-multi-note">Cells may show multiple supporting signals.</p>
     <div id="chartRootCause" class="chart"></div>
     <p id="rootCauseSummary" class="text-summary"></p>
+    <details class="rootcause-explainer"><summary>How to read these signals</summary><ul><li><b>Threshold:</b> citywide top quartile (percentile ≥75%) among all valid cells in the selected scenario hour.</li><li><b>Meaning:</b> top-quartile thresholds are relative investigation thresholds, not engineering failure standards.</li><li><b>Inputs:</b> nearest mapped-tower distance, RTT, demand-pressure proxy and built-up ratio.</li></ul></details>
   </section>
 
   <!-- ===================== DATA TRUST PANEL =====================
@@ -208,16 +286,17 @@
        while the right column keeps going (AI Forecast, then AI vs
        Traditional Detection), which used to leave the space beside
        those two panels empty. This fills it instead of stacking below. -->
-  <section class="panel trust-panel">
-    <div class="panel-header"><h2>🧪 Data Quality &amp; Trust</h2></div>
+  <section class="panel trust-panel" id="trustPanel">
+    <div class="panel-header"><h2><i class="bi bi-shield-check page-title-icon"></i> Data Quality &amp; Trust <span class="cheat-badge real">PROVENANCE</span></h2><span class="panel-hint">Data origin, validation status and interpretation boundaries.</span></div>
+    <div class="trust-explainer trust-summary"><strong>Trust summary</strong><ul><li><b class="trust-real">REAL</b><span>Sourced GIS or measurement input</span></li><li><b class="trust-sim">SIMULATED</b><span>Documented hourly scenario output</span></li><li><b class="trust-ai">AI MODEL</b><span>Frozen quarterly ranking, not probability</span></li><li><b class="trust-heuristic">HEURISTIC</b><span>Transparent interpretation cue</span></li></ul></div>
     <div id="trustDisclaimer" class="disclaimer-box"></div>
     <div class="trust-grid">
       <div>
-        <h3>Real static GIS features (source, % real)</h3>
+        <h3>Sources and their roles</h3>
         <div id="sourceBadges" class="badge-list"></div>
       </div>
       <div>
-        <h3>QoE scenario anchoring</h3>
+        <h3>Study scope and scenario construction</h3>
         <div id="anchoringStat"></div>
       </div>
     </div>
@@ -227,24 +306,44 @@
 
  <div class="main-col main-col-right">
 
+  <section class="ai-workspace-tabs" id="aiWorkspaceTabs">
+    <button class="ai-workspace-tab active" data-ai-tab="risk">Risk ranking</button>
+    <button class="ai-workspace-tab" data-ai-tab="explain">Explainability</button>
+    <button class="ai-workspace-tab" data-ai-tab="comparison">AI vs Scenario Hotspots</button>
+    <button class="ai-workspace-tab" data-ai-tab="trust">Model trust</button>
+  </section>
+  <section class="panel ai-explainability-panel d-none" id="aiExplainabilityPanel">
+    <div class="panel-header"><h2>AI explainability</h2><span class="cheat-badge ai">AI MODEL</span></div>
+    <div id="aiExplainabilityBody"></div>
+  </section>
+
+  <section class="panel priority-action-panel" id="priorityActionPanel">
+    <div class="panel-header">
+      <h2>Priority action centre</h2>
+      <span class="panel-hint">Ranked using existing intervention priority outputs.</span>
+    </div>
+    <div id="priorityActionList" class="priority-action-list"></div>
+    <button class="btn btn-sm btn-outline-primary analyst-jump" onclick="setViewMode('analyst'); document.getElementById('interventionsList').scrollIntoView({behavior: 'smooth', block: 'start'});">Open full action queue</button>
+  </section>
+
   <!-- ===================== COMPARE PANEL ===================== -->
   <section class="panel compare-panel d-none" id="comparePanel">
-    <div class="panel-header"><h2>⚖️ Cell Comparison</h2>
-      <span class="panel-hint">Click hexes on the map while "Compare cells" is active</span>
+    <div class="panel-header"><h2><i class="bi bi-columns-gap page-title-icon"></i> Cell Comparison <span class="cheat-badge sim">DEMO / SCENARIO</span> <span class="cheat-badge ai">QUARTERLY AI</span></h2>
+      <span class="panel-hint">Compare hourly scenario metrics separately from quarterly AI rank.</span>
     </div>
     <div id="compareTable"></div>
+    <h3 class="compare-chart-title">Scenario QoE trend</h3>
     <div id="chartCompare" class="chart" style="height:200px"></div>
   </section>
 
   <!-- ===================== TIME SERIES PANEL ===================== -->
-  <section class="panel timeseries-panel">
-    <div class="panel-header"><h2>Time-Series Analytics <span class="cheat-badge sim">SIM</span></h2>
+  <section class="panel timeseries-panel" id="timeseriesPanel">
+    <div class="panel-header"><h2>Time-Series Analytics <span class="cheat-badge sim">DEMO / SCENARIO</span></h2>
       <span class="panel-hint">Click a point to jump the map to that hour</span>
     </div>
     <div class="trend-range-control">
-      <label>Trend range:</label>
-      <input type="range" id="rangeStart" min="0" max="167" value="0" step="1">
-      <input type="range" id="rangeEnd" min="0" max="167" value="167" step="1">
+      <label for="rangeStart">FROM <output id="rangeStartTimestamp"></output></label><input type="range" id="rangeStart" min="0" max="167" value="0" step="1">
+      <label for="rangeEnd">TO <output id="rangeEndTimestamp"></output></label><input type="range" id="rangeEnd" min="0" max="167" value="167" step="1">
       <span id="rangeLabel" class="time-label"></span>
       <div class="btn-group btn-group-sm granularity-toggle" role="group">
         <button class="btn btn-outline-secondary active" data-granularity="hourly">Hourly</button>
@@ -252,6 +351,7 @@
       </div>
     </div>
     <div id="rangeSummary" class="text-summary"></div>
+    <div id="timeseriesInterpretation" class="timeseries-interpretation"></div>
     <div id="chartQoe" class="chart"></div>
     <div id="chartDemand" class="chart"></div>
     <div id="chartSeverity" class="chart"></div>
@@ -260,32 +360,26 @@
   <!-- ===================== TRAINED AI MODEL PANEL ===================== -->
   <section class="panel ai-panel d-none" id="aiModelPanel">
     <div class="panel-header">
-      <h2>🤖 AI Forecast — Latest Available Model Run <span class="cheat-badge ai">AI MODEL</span></h2>
-      <span class="panel-hint">Onset model has only ever been scored once — see banner below, not animated by the time slider</span>
+      <h2><i class="bi bi-cpu page-title-icon"></i> AI Forecast <span class="cheat-badge ai">AI MODEL</span></h2>
+      <span class="panel-hint">Quarterly emerging-risk ranking · ranks are not probabilities</span>
     </div>
-    <div id="aiTimeBanner" class="ai-time-banner"></div>
-    <div id="aiModelBehaviorBadge" class="ai-behavior-badge"></div>
     <p id="aiSnapshotNote" class="text-summary"></p>
-    <div class="hotspot-grid">
-      <div>
-        <h3>Currently degraded (AI-scored)</h3>
-        <ol id="aiDegradedNowList" class="ranked-list"></ol>
-      </div>
-      <div>
-        <h3>Highest next-hour onset risk (Top 10)</h3>
-        <ol id="aiTopRiskList" class="ranked-list"></ol>
-      </div>
+    <div id="aiActiveCellNotice" class="ai-active-cell-notice d-none"></div>
+    <div id="aiTimeMachineStatus" class="mt-2"></div>
+    <div id="aiForecastBandFilters" class="ai-band-filters" aria-label="Filter forecast queue by risk band"></div>
+    <div class="ai-investigation-queue">
+      <h3 id="aiQueueHeading">High-risk investigation queue</h3>
+      <ol id="aiDegradedNowList" class="ranked-list"></ol>
+      <div class="ai-legacy-risk-list"><h3>Highest next-hour onset risk</h3><ol id="aiTopRiskList" class="ranked-list"></ol></div>
     </div>
-    <button class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#aiModelModal">📊 Model Info &amp; Validated Metrics</button>
-    <button class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#forecastValidationModal">📈 Forecast Validation</button>
-    <div class="disclaimer-box mt-2">Observed, AI-estimated and simulated outputs are displayed separately. Hourly forecast results are based on a simulated scenario and require validation on real hourly telecom telemetry before operational use. Risk scores are a relative ranking, not a calibrated probability.</div>
+    <details class="ai-methodology-disclosure"><summary>How this forecast works</summary><div id="aiTimeBanner" class="ai-time-banner"></div><div id="aiModelBehaviorBadge" class="ai-behavior-badge"></div><p>The model ranks currently-normal cells for investigation using real quarterly context. A rank is not an individual probability, live network state, or proven cause.</p><div class="ai-methodology-actions"><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#aiModelModal">Model info &amp; metrics</button><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#forecastValidationModal">Forecast validation</button></div></details>
   </section>
 
   <!-- ===================== DETECTION COMPARISON PANEL ===================== -->
   <section class="panel ai-panel d-none" id="detectionComparisonPanel">
     <div class="panel-header">
-      <h2>🔍 AI vs Traditional Hotspot Detection</h2>
-      <span class="panel-hint">Both methods compared at the AI's scored hour</span>
+      <h2><i class="bi bi-intersect page-title-icon"></i> Quarterly AI vs Demo Hotspots</h2>
+      <span class="panel-hint">A conceptual comparison of outputs with different purposes and time bases.</span>
     </div>
     <div id="detectionComparisonBody"></div>
   </section>
@@ -297,13 +391,10 @@
 <!-- ===================== INTERVENTIONS (full-width row below the two columns, given a matching column length so it isn't squeezed or stretched to fit inside the narrower main-col-right) ===================== -->
 <div class="full-width-row full-dashboard-only">
   <section class="panel interventions-panel">
-    <div class="panel-header"><h2>🛠️ Intervention Priorities <span class="cheat-badge real">REAL rank</span></h2>
-      <span class="panel-hint">Ranked by the pipeline's own priority_base_score among currently degraded cells</span>
+    <div class="panel-header"><h2><i class="bi bi-list-check page-title-icon"></i> Intervention Priorities <span class="cheat-badge sim">DEMO / SCENARIO</span></h2>
+      <span class="panel-hint">Scenario issues ranked by pipeline priority; quarterly AI context is labelled separately.</span>
     </div>
-    <div class="interventions-toolbar">
-      <label><input type="checkbox" id="hideDoneToggle"> Hide done</label>
-      <button id="resetTrackingBtn" class="btn btn-sm btn-outline-secondary">Reset planned/done</button>
-    </div>
+    <div class="interventions-toolbar" id="interventionsToolbar"></div>
     <div id="interventionsList" class="interventions-grid"></div>
   </section>
 </div>
@@ -377,9 +468,46 @@
   </div>
 </div>
 
+<div class="modal fade" id="dataTrustModal" tabindex="-1" aria-labelledby="dataTrustModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dataTrustModalTitle">Data trust and provenance</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body trust-modal-body">
+        <p><span class="cheat-badge real">REAL</span> Static GIS features and quarterly Ookla measurements come from the listed source datasets.</p>
+        <p><span class="cheat-badge sim">SIMULATED</span> Hourly QoE is a documented scenario, not observed operator telemetry.</p>
+        <p><span class="cheat-badge heuristic">HEURISTIC</span> Investigation signals and intervention guidance are transparent planning support.</p>
+        <p><span class="cheat-badge ai">AI MODEL</span> Quarterly emerging risk is a relative prioritisation signal, not a calibrated probability.</p>
+        <button class="btn btn-sm btn-outline-primary" data-bs-dismiss="modal" onclick="setViewMode('analyst'); document.querySelector('.trust-panel').scrollIntoView({behavior: 'smooth', block: 'start'});">Open complete trust details</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade command-palette-modal" id="commandPaletteModal" tabindex="-1" aria-labelledby="commandPaletteTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="commandPaletteTitle">Command palette</h5><kbd>Ctrl K</kbd></div>
+      <div class="modal-body">
+        <input id="commandPaletteSearch" class="form-control" placeholder="Search commands or jump to a workspace" aria-label="Search commands">
+        <div class="command-list">
+          <button data-bs-dismiss="modal" onclick="setAppPage('map')"><span>Go to Network Map</span><kbd>M</kbd></button>
+          <button data-bs-dismiss="modal" onclick="setAppPage('hotspots')"><span>Show Hotspots</span><kbd>H</kbd></button>
+          <button data-bs-dismiss="modal" onclick="setAppPage('ai')"><span>Open AI Intelligence</span><kbd>A</kbd></button>
+          <button data-bs-dismiss="modal" onclick="setAppPage('interventions')"><span>Open Interventions</span><kbd>I</kbd></button>
+          <button data-bs-dismiss="modal" onclick="advanceGuidedDemo()"><span>Start guided demo</span><kbd>G</kbd></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="dashboard.js"></script>
 </body>
 </html>

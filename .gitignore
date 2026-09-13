@@ -16,3 +16,10 @@ data/raw/*
 .DS_Store
 Thumbs.db
 *.tmp
+
+# Redundant root-level dashboard exports (canonical copies live in dashboard/build/data)
+/data/city_timeseries.json
+/data/h3_grid.geojson
+/data/panel.json
+/data/summary_stats.json
+/build_dashboard_pandas.py

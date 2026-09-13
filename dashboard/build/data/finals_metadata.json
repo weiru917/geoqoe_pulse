@@ -1,0 +1,83 @@
+{
+  "package_version": "1.0.0",
+  "model_version": "finals_quarterly_onset_v1.0.0",
+  "predictor_quarter": "2026Q1",
+  "forecast_quarter": "2026Q2",
+  "eligible_cells": 2186,
+  "risk_policy": {
+    "high": "Top 50 currently-normal cells",
+    "elevated": "Ranks 51\u2013200",
+    "lower": "Ranks 201 and below"
+  },
+  "risk_score_note": "The XGBoost output is used for relative ranking and must not be displayed as a calibrated probability.",
+  "measurement_support_note": "Measurement support is based on the number of Ookla tests contributing to the cell-quarter measurement. It is a relative evidence indicator, not an accuracy guarantee.",
+  "explanation_note": "SHAP contributors explain model behaviour and must not be described as proven causes of degradation.",
+  "time_machine_categories": {
+    "correctly_anticipated": "Top-200 flagged cell that actually became underperforming",
+    "false_alert": "Top-200 flagged cell that did not become underperforming",
+    "missed": "Lower-risk cell that later became underperforming",
+    "correctly_lower_risk": "Lower-risk cell that remained outside the underperforming group"
+  },
+  "pipeline_version": "3.3.0",
+  "model_family": "XGBClassifier",
+  "feature_count": 44,
+  "task": "Among currently normal cells, rank which cells are most likely to fall into the bottom 25% of Klang Valley download performance next quarter.",
+  "score_interpretation": "Model output is an emerging-risk ranking score. It is not presented as a calibrated probability.",
+  "risk_thresholds": {
+    "high_max_rank": 50,
+    "elevated_max_rank": 200,
+    "lower_min_rank": 201
+  },
+  "final_test": {
+    "pr_auc": 0.44920862998066347,
+    "roc_auc": 0.8573558562440747,
+    "no_skill_pr_auc": 0.09377859103385179,
+    "total_events": 205,
+    "event_rate": 0.09377859103385179,
+    "top_k": [
+      {
+        "k": 50,
+        "captured_events": 32,
+        "total_events": 205,
+        "precision": 0.64,
+        "recall": 0.15609756097560976,
+        "lift": 6.824585365853658
+      },
+      {
+        "k": 100,
+        "captured_events": 57,
+        "total_events": 205,
+        "precision": 0.57,
+        "recall": 0.2780487804878049,
+        "lift": 6.078146341463413
+      },
+      {
+        "k": 200,
+        "captured_events": 92,
+        "total_events": 205,
+        "precision": 0.46,
+        "recall": 0.44878048780487806,
+        "lift": 4.905170731707317
+      }
+    ]
+  },
+  "shap_family_importance": [
+    {
+      "family": "QoE / performance history",
+      "importance_share_pct": 80.62191920928952
+    },
+    {
+      "family": "Geographic / infrastructure context",
+      "importance_share_pct": 14.058641715743436
+    },
+    {
+      "family": "Activity / population context",
+      "importance_share_pct": 5.319439074967046
+    }
+  ],
+  "observed_layer": {
+    "quarter": "2026Q1",
+    "measured_cells": 2986,
+    "underperforming_cells": 746
+  }
+}

@@ -9,7 +9,9 @@ Run once from the repo root:
     python3 build_dashboard_data.py
 """
 
+import csv
 import json
+import shutil
 import statistics
 import sys
 from pathlib import Path
@@ -18,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "tools"))
 import pyparquet_min as pq  # noqa: E402
 import klang_valley_gazetteer as gaz  # noqa: E402
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent / "data"
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -26,6 +28,14 @@ STATIC_PARQUET = REPO / "data/outputs/cell_static_features.parquet"
 PANEL_PARQUET = REPO / "data/outputs/cell_time_dataset.parquet"
 GRID_GEOJSON = REPO / "data/processed/grid_geometry.geojson"
 METADATA_JSON = REPO / "data/outputs/metadata.json"
+QUARTERLY_PARQUET = REPO / "data/outputs/cell_quarter_dataset.parquet"
+FINALS_DIR = REPO / "handoff/finals_ai"
+FINALS_ASSET = FINALS_DIR / "dashboard_assets/2026Q1_to_2026Q2_cells.geojson"
+FINALS_BASE_METADATA = FINALS_DIR / "dashboard_assets/dashboard_metadata.json"
+FINALS_FREEZE = FINALS_DIR / "audit/08_model_freeze.json"
+FINALS_METRICS = FINALS_DIR / "audit/09_final_test_metrics.csv"
+FINALS_TOPK = FINALS_DIR / "audit/09_final_test_topk.csv"
+FINALS_SHAP = FINALS_DIR / "audit/10_shap_family_importance.csv"
 
 # Hotspot confidence-band code -> label (from feature_dictionary.xlsx)
 HOTSPOT_CODES = {
@@ -37,6 +47,101 @@ MORAN_CODES = {0: "not_significant", 1: "LL", 2: "LH", 3: "HL", 4: "HH"}
 
 def r(v, nd=2):
     return None if v is None else round(v, nd)
+
+
+def build_quarterly_assets(grid):
+    """Export observed 2026Q1 status separately from the AI forecast."""
+    columns = [
+        "h3_index", "quarter_label", "is_below_area_norm", "ookla_dl_mbps",
+        "ookla_ul_mbps", "ookla_rtt_ms", "ookla_tests",
+        "dl_percentile_in_quarter", "population_density_per_km2",
+        "population_day", "district_population", "viirs_rad_quarter",
+        "viirs_rad_yoy_log_ratio", "tower_density_per_km2",
+        "dist_to_nearest_tower_m", "building_density_per_km2", "built_up_ratio",
+        "landcover_built_up_pct", "road_density_km_per_km2",
+        "intersection_density_per_km2", "dist_to_nearest_transit_m",
+    ]
+    _, quarterly, n_quarterly = pq.read_parquet(str(QUARTERLY_PARQUET), columns=columns)
+    geometry_by_h3 = {
+        feature["properties"]["h3_index"]: feature["geometry"]
+        for feature in grid["features"]
+    }
+    features = []
+    for i in range(n_quarterly):
+        if quarterly["quarter_label"][i] != "2026Q1":
+            continue
+        h3 = quarterly["h3_index"][i]
+        geometry = geometry_by_h3.get(h3)
+        if geometry is None:
+            continue
+        underperforming = bool(quarterly["is_below_area_norm"][i])
+        properties = {name: quarterly[name][i] for name in columns}
+        properties["current_status"] = (
+            "currently_underperforming" if underperforming
+            else "currently_not_underperforming"
+        )
+        features.append({"type": "Feature", "geometry": geometry, "properties": properties})
+
+    observed = {
+        "type": "FeatureCollection",
+        "name": "GeoQoE 2026Q1 observed quarterly status",
+        "features": features,
+    }
+    (OUT / "quarterly_observed_2026Q1.geojson").write_text(json.dumps(observed))
+    print(f"  wrote quarterly_observed_2026Q1.geojson ({len(features)} measured cells)")
+
+    shutil.copyfile(FINALS_ASSET, OUT / "finals_quarterly.geojson")
+    metadata = json.loads(FINALS_BASE_METADATA.read_text())
+    freeze = json.loads(FINALS_FREEZE.read_text())
+    with FINALS_METRICS.open(newline="") as handle:
+        metrics = {row["model"]: row for row in csv.DictReader(handle)}
+    with FINALS_TOPK.open(newline="") as handle:
+        top_k = [row for row in csv.DictReader(handle) if row["model"] == "xgb_full"]
+    with FINALS_SHAP.open(newline="") as handle:
+        shap_families = list(csv.DictReader(handle))
+
+    selected = metrics["xgb_full"]
+    baseline = metrics["constant"]
+    metadata.update({
+        "pipeline_version": "3.3.0",
+        "model_family": freeze["model_family"],
+        "feature_count": freeze["feature_count"],
+        "task": freeze["task"],
+        "score_interpretation": freeze["score_interpretation"],
+        "risk_thresholds": {"high_max_rank": 50, "elevated_max_rank": 200, "lower_min_rank": 201},
+        "final_test": {
+            "pr_auc": float(selected["pr_auc"]),
+            "roc_auc": float(selected["roc_auc"]),
+            "no_skill_pr_auc": float(baseline["pr_auc"]),
+            "total_events": int(top_k[0]["total_events"]),
+            "event_rate": int(top_k[0]["total_events"]) / metadata["eligible_cells"],
+            "top_k": [
+                {
+                    "k": int(row["k"]),
+                    "captured_events": int(row["captured_events"]),
+                    "total_events": int(row["total_events"]),
+                    "precision": float(row["precision_at_k"]),
+                    "recall": float(row["recall_at_k"]),
+                    "lift": float(row["lift_at_k"]),
+                }
+                for row in top_k
+            ],
+        },
+        "shap_family_importance": [
+            {"family": row["family"], "importance_share_pct": float(row["importance_share_pct"])}
+            for row in shap_families
+        ],
+        "observed_layer": {
+            "quarter": "2026Q1",
+            "measured_cells": len(features),
+            "underperforming_cells": sum(
+                f["properties"]["current_status"] == "currently_underperforming"
+                for f in features
+            ),
+        },
+    })
+    (OUT / "finals_metadata.json").write_text(json.dumps(metadata, indent=2))
+    print("  copied finals_quarterly.geojson and wrote enriched finals_metadata.json")
 
 
 def main():
@@ -279,6 +384,9 @@ def main():
         ),
     }
     (OUT / "summary_stats.json").write_text(json.dumps(summary, indent=2))
+
+    print("Building quarterly observed and finals metadata assets …")
+    build_quarterly_assets(grid)
 
     print("Done. Output files:")
     for f in sorted(OUT.glob("*.json")) + sorted(OUT.glob("*.geojson")):

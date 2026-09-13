@@ -1,7 +1,7 @@
 {
   "study_area": "Klang Valley core: Kuala Lumpur federal territory, Putrajaya federal territory, and 6 urbanised Selangor districts (Gombak, Hulu Langat, Klang, Kuala Langat, Petaling, Sepang). Deliberately excludes rural/exurban Selangor (Sabak Bernam, Hulu Selangor, etc.).",
-  "pipeline_version": "3.2.0",
-  "generated_at_utc": "2026-08-04T21:18:12.999594+00:00",
+  "pipeline_version": "3.3.0",
+  "generated_at_utc": "2026-08-30T04:04:13.820606+00:00",
   "h3_resolution": 8,
   "total_cells": 4918,
   "total_timestamps": 168,
@@ -23,7 +23,12 @@
     "osm": true,
     "worldpop": true,
     "dosm_population": true,
-    "ridership": true
+    "ridership": true,
+    "mlab_diurnal_curve": true,
+    "sunway_qoe": true,
+    "dosm_population_district": true,
+    "viirs_vnp46a3": true,
+    "esa_worldcover": true
   },
   "qoe_thresholds": {
     "dl_degraded_mbps": 10.0,

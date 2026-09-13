@@ -2,6 +2,10 @@
 """
 build_onset_data.py
 --------------------
+LEGACY/INACTIVE: retained to reproduce the superseded next-hour dashboard
+adapter. The current dashboard loads the finals quarterly GeoJSON and does not
+load the files produced here.
+
 Converts the frozen GeoQoE_AI competition package (the "Trained AI Model"
 deliverable — a real, already-trained XGBoost onset model plus a real
 static-QoE ensemble, both evaluated on real held-out data as described in
