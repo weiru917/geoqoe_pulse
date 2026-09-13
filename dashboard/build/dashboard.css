@@ -1923,6 +1923,61 @@ body.workspace-tool-whatif #workspaceMorePanel .whatif-box {
   background:#e6a23c!important;
   color:#fff!important;
 }
+
+/* Time-Series controls: readable stacked range rows with a compact granularity row. */
+.timeseries-panel .trend-range-control {
+  display:grid!important;
+  grid-template-columns:max-content minmax(180px,1fr)!important;
+  align-items:center;
+  gap:5px 9px!important;
+  max-width:680px;
+}
+.timeseries-panel .trend-range-control label {
+  grid-column:1;
+  margin:0!important;
+  white-space:nowrap;
+}
+.timeseries-panel .trend-range-control input[type="range"] {
+  grid-column:2;
+  width:100%!important;
+  min-width:0;
+}
+.timeseries-panel .trend-range-control label:nth-of-type(2) { grid-row:2; }
+.timeseries-panel .trend-range-control label:nth-of-type(2) + input { grid-row:2; }
+.timeseries-panel .trend-range-control #rangeLabel {
+  grid-column:1 / -1;
+  grid-row:3;
+  margin:1px 0 0!important;
+}
+.timeseries-panel .trend-range-control .granularity-toggle {
+  grid-column:1 / -1;
+  grid-row:4;
+  justify-self:start;
+  margin:2px 0 0!important;
+}
+.timeseries-panel .trend-range-control #rangeLabel { display:none!important; }
+.timeseries-panel .granularity-toggle .btn {
+  font-size:10px!important;
+  padding:3px 8px!important;
+}
+
+/* Give the desktop header a two-row layout when controls begin to compete for width. */
+@media (min-width:1000px) and (max-width:1500px) {
+  .app-header {
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:8px 14px;
+  }
+  .app-header .header-left { grid-column:1; grid-row:1; min-width:0; }
+  .app-header .header-right { grid-column:2; grid-row:1; min-width:0; }
+  .app-header .header-center {
+    grid-column:1 / -1;
+    grid-row:2;
+    justify-content:flex-start;
+    min-width:0;
+  }
+  .app-header .time-control { max-width:720px; }
+}
 .map-selected-bar { gap:8px; flex-wrap:wrap; }
 .source-status[data-provenance="REAL SOURCE"],.source-status[data-provenance="REAL QUARTERLY"],.source-status[data-provenance="THIRD-PARTY MEASURED"] { color:var(--ui-real); background:#e5f6ef; }
 .source-status[data-provenance="AI MODEL"] { color:var(--ui-ai); background:#efe7f8; }

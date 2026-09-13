@@ -1796,7 +1796,7 @@ function renderRootCause() {
     marker: { color: colors, line: { color: "#fff", width: 1 } },
     text: values.map((count, i) => `${count} · ${percentages[i].toFixed(0)}%`), textposition: "outside", cliponaxis: false,
     hovertemplate: "%{y}<br>%{x} cells · %{customdata[1]:.1f}% of degraded cells<br>Cells may have multiple signals<br>Click to filter the queue<extra></extra>"
-  }, { x: values.map(v => v === 1 ? 1 : null), y: labels, type: "scatter", mode: "markers", marker: { color: colors, size: 7, line: { color: "#fff", width: 1 } }, hoverinfo: "skip", showlegend: false }], { margin: { l: 165, r: 72, t: 12, b: 35 }, height: 285, showlegend: false, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", xaxis: { title: "Scenario cells", rangemode: "tozero", gridcolor: "#eee9f4", zeroline: false, tickfont: { size: 9 } }, yaxis: { tickfont: { size: 10, color: "#4f435c" } } }, plotlyConfig());
+  }, { x: values.map(v => v === 1 ? 1 : null), y: labels, type: "scatter", mode: "markers", marker: { color: colors, size: 7, line: { color: "#fff", width: 1 } }, hoverinfo: "skip", showlegend: false }], { margin: { l: 220, r: 72, t: 12, b: 35 }, height: 285, showlegend: false, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", xaxis: { title: "Scenario cells", rangemode: "tozero", gridcolor: "#eee9f4", zeroline: false, tickfont: { size: 9 } }, yaxis: { tickfont: { size: 10, color: "#4f435c" }, automargin: true } }, plotlyConfig());
   chart.removeAllListeners?.("plotly_click");
   chart.on?.("plotly_click", event => {
     const key = event.points?.[0]?.customdata?.[0];
