@@ -1978,6 +1978,35 @@ body.workspace-tool-whatif #workspaceMorePanel .whatif-box {
   }
   .app-header .time-control { max-width:720px; }
 }
+
+/* Laptop widths: keep the header readable before controls begin to collide. */
+@media (min-width:1501px) and (max-width:1700px) {
+  .app-header {
+    display:grid;
+    grid-template-columns:minmax(260px,auto) minmax(0,1fr) auto;
+    align-items:center;
+    gap:8px 14px;
+  }
+  .app-header .header-left { grid-column:1; grid-row:1; min-width:0; }
+  .app-header .header-center {
+    grid-column:2;
+    grid-row:1;
+    min-width:0;
+    justify-content:flex-start;
+  }
+  .app-header .header-right {
+    grid-column:3;
+    grid-row:1;
+    min-width:0;
+  }
+  .app-header .logo-subtitle { max-width:250px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .app-header .region-badge { max-width:185px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .app-header .time-control { min-width:0; max-width:none; flex:1 1 auto; }
+  .app-header .time-control > span { min-width:0; }
+  .app-header .time-control > span:last-child { max-width:175px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .app-header .live-indicator { max-width:260px; min-width:0; }
+  .app-header .live-indicator > span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+}
 .map-selected-bar { gap:8px; flex-wrap:wrap; }
 .source-status[data-provenance="REAL SOURCE"],.source-status[data-provenance="REAL QUARTERLY"],.source-status[data-provenance="THIRD-PARTY MEASURED"] { color:var(--ui-real); background:#e5f6ef; }
 .source-status[data-provenance="AI MODEL"] { color:var(--ui-ai); background:#efe7f8; }
