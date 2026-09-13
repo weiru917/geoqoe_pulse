@@ -12,6 +12,11 @@ This document is the single entry point for judging — what's inside the
 submission, where every dataset and model actually lives on disk, how the
 pieces fit together, and the fastest way to open the working prototype.
 
+> **Current finals note (2026Q1 → 2026Q2):** The active dashboard uses the
+> frozen quarterly finals package and a separate real 2026Q1 observed-status
+> layer. The older next-hour AI files are retained for provenance/legacy
+> comparison only and are not the validated default workflow.
+
 ---
 
 ## Table of contents
@@ -101,6 +106,31 @@ docker run --rm -p 3000:3000 geoqoe-pulse
 > Opening `dashboard/build/index.html` directly by double-clicking it will
 > **not** work — browsers block the page from loading its data files that
 > way, hence the small local server above.
+
+### 3.1 Recommended dashboard workflow
+
+Use the dashboard in this order:
+
+1. **REVEAL** — start with the real quarterly observed-status map and the
+   executive overview. Identify cells already marked degraded or severe.
+2. **ANTICIPATE** — open **AI Forecast** to rank currently-normal cells for
+   emerging underperformance in the next quarter. Ranks are priorities, not
+   probabilities.
+3. **EXPLAIN** — use **Investigation Evidence** to inspect independent
+   citywide-relative signals, SHAP contributors, geographic/activity context,
+   and measurement support. A signal is evidence for investigation, not a
+   diagnosed cause.
+4. **PRIORITISE** — filter the investigation queue by High/Medium/Low,
+   workflow status, or evidence category, then record the next investigation
+   step.
+
+The map's **Quarterly** lens is the validated default. **QoE**, **Demand**,
+**Hotspots**, Time-Series Analytics, and hourly playback are explicitly
+**DEMO / SCENARIO** views. Never combine an hourly scenario number with a
+quarterly AI rank without reading both labels.
+
+For a complete plain-language explanation of every tab, button, filter, map
+control, and selected-cell field, see [`dashboard/build/USER_GUIDE.md`](dashboard/build/USER_GUIDE.md).
 
 ### Alternative: the Streamlit version
 
@@ -209,6 +239,27 @@ judge-facing snapshot at
 `Trained AI Model/GeoQoE_AI/competition_package/` (also mirrored into
 `dashboard/build/ai_model/` for the live dashboard). Full training code for
 both is in `Trained AI Model/GeoQoE_AI/code/`.
+
+### 5.0 Active dashboard model versus legacy package
+
+The dashboard's validated AI view is the **frozen quarterly finals model**:
+
+- predictor quarter: **2026Q1**;
+- forecast quarter: **2026Q2**;
+- input/output: `dashboard/build/data/finals_quarterly.geojson`;
+- metadata and risk policy: `dashboard/build/data/finals_metadata.json`;
+- observed current-quarter layer: `dashboard/build/data/quarterly_observed_2026Q1.geojson`.
+
+It ranks currently-normal cells for emerging next-quarter underperformance and
+keeps observed underperformance separate from forecast eligibility. The
+dashboard loads model version, metrics, thresholds, interpretation notes, and
+the `score_is_probability` flag from metadata rather than hard-coding them in
+JavaScript.
+
+The files under `dashboard/build/ai_model/dashboard/` and the old
+`data/onset_model.json`/`data/model_card.json` path are **legacy next-hour
+artifacts**. They remain useful for provenance and comparison, but they are
+not the source of the current quarterly forecast screen.
 
 ### 5.1 Static spatial QoE estimator
 
