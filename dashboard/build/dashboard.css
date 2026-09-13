@@ -1983,22 +1983,18 @@ body.workspace-tool-whatif #workspaceMorePanel .whatif-box {
 @media (min-width:1501px) and (max-width:1700px) {
   .app-header {
     display:grid;
-    grid-template-columns:minmax(260px,auto) minmax(0,1fr) auto;
+    grid-template-columns:minmax(0,1fr) auto;
     align-items:center;
     gap:8px 14px;
   }
   .app-header .header-left { grid-column:1; grid-row:1; min-width:0; }
   .app-header .header-center {
-    grid-column:2;
-    grid-row:1;
+    grid-column:1 / -1;
+    grid-row:2;
     min-width:0;
     justify-content:flex-start;
   }
-  .app-header .header-right {
-    grid-column:3;
-    grid-row:1;
-    min-width:0;
-  }
+  .app-header .header-right { grid-column:2; grid-row:1; min-width:0; }
   .app-header .logo-subtitle { max-width:250px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .app-header .region-badge { max-width:185px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .app-header .time-control { min-width:0; max-width:none; flex:1 1 auto; }
