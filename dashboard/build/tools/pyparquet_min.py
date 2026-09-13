@@ -16,15 +16,35 @@ Thrift metadata, which this does handle generically).
 from __future__ import annotations
 
 import ctypes
+import ctypes.util
 import gzip
+import os
+import shutil
 import struct
 from dataclasses import dataclass, field
+from pathlib import Path
 
 _libzstd = None
 def _get_libzstd():
     global _libzstd
     if _libzstd is None:
-        _libzstd = ctypes.CDLL("libzstd.so.1")
+        candidates = [ctypes.util.find_library("zstd")]
+        if os.name == "nt":
+            candidates += ["libzstd.dll", "zstd.dll"]
+            git = shutil.which("git")
+            if git:
+                candidates.append(str(Path(git).resolve().parents[1] / "mingw64/bin/libzstd.dll"))
+        else:
+            candidates += ["libzstd.so.1", "libzstd.so", "libzstd.dylib"]
+        errors = []
+        for candidate in filter(None, candidates):
+            try:
+                _libzstd = ctypes.CDLL(candidate)
+                break
+            except OSError as exc:
+                errors.append(f"{candidate}: {exc}")
+        if _libzstd is None:
+            raise RuntimeError("Unable to load the Zstandard library (" + "; ".join(errors) + ")")
         _libzstd.ZSTD_getFrameContentSize.restype = ctypes.c_ulonglong
         _libzstd.ZSTD_getFrameContentSize.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
         _libzstd.ZSTD_decompress.restype = ctypes.c_size_t
