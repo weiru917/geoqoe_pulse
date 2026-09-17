@@ -47,6 +47,8 @@ const state = {
   interventionPriorityFilter: "all",
   interventionStatusFilter: "all",
   interventionEvidenceFilter: "all",
+  quarterlyPriorityView: "future",
+  quarterlyMapView: "combined",
   aiForecastBandFilter: "high",
   aiForecastExpanded: false,
   expandedRankedLists: new Map(),
@@ -64,6 +66,8 @@ const state = {
   darkMode: false,
   map: null,
   geoLayer: null,
+  activeHoverLayer: null,
+  activePopup: null,
   towerLayer: null,
   tileLayers: {},
   playing: false,
@@ -210,6 +214,9 @@ async function boot() {
       renderLegend();
     });
   });
+  document.querySelectorAll(".quarterly-map-view-btn").forEach(btn => {
+    btn.addEventListener("click", () => setQuarterlyMapView(btn.dataset.quarterlyView));
+  });
   document.querySelectorAll(".insight-tab[data-insight-tab]").forEach(btn => {
     btn.addEventListener("click", () => {
       setInsightTab(btn.dataset.insightTab);
@@ -301,7 +308,7 @@ async function boot() {
   document.querySelectorAll("[data-page]").forEach(btn => btn.addEventListener("click", () => setAppPage(btn.dataset.page)));
   document.querySelectorAll(".ai-workspace-tab").forEach(btn => btn.addEventListener("click", () => setAiWorkspaceTab(btn.dataset.aiTab)));
   document.querySelectorAll(".analyst-tab").forEach(btn => btn.addEventListener("click", () => setAnalystTab(btn.dataset.analystTab)));
-  document.querySelectorAll(".workspace-tool:not([data-workspace-tool='more']), .more-tool-list [data-workspace-tool]").forEach(btn => btn.addEventListener("click", () => setWorkspaceTool(btn.dataset.workspaceTool)));
+
   const actionsHost = document.querySelector(".full-width-row");
   if (actionsHost) {
     actionsHost.classList.add("workspace-actions-host");
@@ -440,7 +447,7 @@ const EXPLAIN_SIGNAL_META = {
   rtt_ms: { label: "RTT", unit: "ms", direction: "high" },
   jitter_ms: { label: "Jitter", unit: "ms", direction: "high" },
   loss_pct: { label: "Packet loss", unit: "%", direction: "high" },
-  demand_pressure: { label: "Demand pressure", unit: "", direction: "high" },
+  demand_pressure: { label: "Scenario Pressure", unit: "", direction: "high" },
 };
 
 function severityFromZ(z) {
@@ -576,7 +583,11 @@ function toggleDarkMode() {
 }
 function applyDarkMode() {
   document.body.classList.toggle("dark-mode", state.darkMode);
-  document.getElementById("darkModeToggle").textContent = state.darkMode ? "☀️" : "🌙";
+  const toggle = document.getElementById("darkModeToggle");
+  toggle.innerHTML = `<i class="bi ${state.darkMode ? "bi-sun" : "bi-moon"}" aria-hidden="true"></i>`;
+  toggle.setAttribute("aria-pressed", String(state.darkMode));
+  toggle.setAttribute("aria-label", state.darkMode ? "Switch to light theme" : "Switch to dark theme");
+  syncOperatorChartTheme();
 }
 
 // ---------------------------------------------------------------------
@@ -636,6 +647,16 @@ const TIME_MACHINE_COLORS = {
 };
 function onsetTierColor(c) {
   if (!state.onset) return "#cbd5e1";
+  const currentStatus = onsetValue("current_status", c);
+  if (state.quarterlyMapView === "observed") {
+    if (currentStatus === "currently_underperforming") return "#7f1d1d";
+    if (currentStatus === "currently_not_underperforming") return "#dfe9e5";
+    return "#e2e8f0";
+  }
+  if (state.quarterlyMapView === "forecast") {
+    if (currentStatus === "currently_underperforming") return "#e2e8f0";
+    return ONSET_TIER_COLORS[onsetValue("onset_priority_tier", c)] || "#cbd5e1";
+  }
   if (state.finalsActualRevealed) {
     return TIME_MACHINE_COLORS[onsetValue("time_machine_result", c)] ||
       (onsetValue("current_status", c) === "currently_underperforming" ? "#7f1d1d" : "#e2e8f0");
@@ -703,7 +724,7 @@ function colorForMode(mode, t, c) {
 // ---------------------------------------------------------------------
 
 function buildMap() {
-  const map = L.map("map", { zoomControl: true }).setView([3.05, 101.65], 11);
+  const map = L.map("map", { zoomControl: true, closePopupOnClick: true }).setView([3.05, 101.65], 11);
 
   state.tileLayers.labels = L.tileLayer("https://tile.openstreetmap.de/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors", maxZoom: 18,
@@ -717,10 +738,23 @@ function buildMap() {
     style: () => ({ color: "#334155", weight: 0.5, fillOpacity: 0.75, fillColor: "#cbd5e1" }),
     onEachFeature: (feature, layer) => {
       const h3 = feature.properties.h3_index;
-      layer.bindTooltip(() => hoverHtml(h3), { sticky: true, direction: "top" });
-      layer.on("mouseover", () => { const selected = h3 === state.selectedH3 || state.compareCells.includes(h3); layer.setStyle({ weight: selected ? 3.4 : 2, opacity: 1, fillOpacity: selected ? 0.95 : 0.88 }); layer.bringToFront(); });
-      layer.on("mouseout", () => renderMapColors());
+      layer.bindTooltip(() => hoverHtml(h3), { sticky: true, direction: "top", permanent: false });
+      layer.on("mouseover", () => {
+        if (state.activeHoverLayer && state.activeHoverLayer !== layer) state.activeHoverLayer.closeTooltip();
+        state.activeHoverLayer = layer;
+        const selected = h3 === state.selectedH3 || state.compareCells.includes(h3);
+        layer.setStyle({ weight: selected ? 3.4 : 2, opacity: 1, fillOpacity: selected ? 0.95 : 0.88 });
+        layer.bringToFront();
+      });
+      layer.on("mouseout", () => {
+        layer.closeTooltip();
+        if (state.activeHoverLayer === layer) state.activeHoverLayer = null;
+        renderMapColors();
+      });
       layer.on("click", () => {
+        if (state.activeHoverLayer) state.activeHoverLayer.closeTooltip();
+        state.activeHoverLayer = null;
+        map.closePopup();
         if (state.compareMode) toggleCompareCell(h3);
         else selectArea(h3);
       });
@@ -739,6 +773,13 @@ function buildMap() {
   state.map = map;
   state.geoLayer = geoLayer;
   map.on("zoomend", () => { if (state.panel) renderMapColors(); });
+  map.on("popupopen", event => {
+    if (state.activePopup && state.activePopup !== event.popup) map.closePopup(state.activePopup);
+    state.activePopup = event.popup;
+  });
+  map.on("popupclose", event => {
+    if (state.activePopup === event.popup) state.activePopup = null;
+  });
   state.towerLayer = towerLayer;
 }
 
@@ -809,10 +850,17 @@ function hoverHtml(h3) {
     const rank = onsetValue("onset_risk_rank", c);
     if (state.finals) {
       const current = onsetValue("current_status", c);
+      if (state.quarterlyMapView === "observed") {
+        return `<b>2026Q1 observed status:</b> ${current === "currently_underperforming" ? "Underperforming" : current === "currently_not_underperforming" ? "Not underperforming" : "Not measured"}`;
+      }
+      if (state.quarterlyMapView === "forecast") {
+        if (current === "currently_underperforming") return `<b>2026Q2 AI forecast:</b> Not evaluated because underperformance was already observed in 2026Q1`;
+        return `<b>2026Q2 AI priority:</b> ${ONSET_TIER_LABELS[tier] ?? "Not evaluated"}${rank != null ? ` · #${rank} of ${state.finals.metadata.eligible_cells?.toLocaleString?.() ?? "—"}` : ""}`;
+      }
       if (state.finalsActualRevealed && onsetValue("time_machine_result", c)) {
         return `<b>2026Q2 result:</b> ${timeMachineLabel(onsetValue("time_machine_result", c))}<br/><b>Forecast rank:</b> ${rank != null ? `#${rank}` : "Not ranked"}`;
       }
-      if (current === "currently_underperforming") return `<b>2026Q1 observed:</b> Current underperformance<br/><b>AI forecast:</b> Not eligible because the issue already existed`;
+      if (current === "currently_underperforming") return `<b>2026Q1 observed:</b> Underperforming<br/><b>AI forecast:</b> Not evaluated because the issue already existed`;
       return `<b>2026Q1 observed:</b> ${current === "currently_not_underperforming" ? "Not underperforming" : "Not measured"}<br/><b>2026Q2 priority:</b> ${ONSET_TIER_LABELS[tier] ?? "Not eligible"}${rank != null ? ` · #${rank} of ${state.finals.metadata.eligible_cells?.toLocaleString?.() ?? "—"}` : ""}`;
     }
     const score = onsetValue("next_hour_onset_risk_score", c);
@@ -825,7 +873,7 @@ function hoverHtml(h3) {
     return `<b>${status === "observed_ookla" ? "Observed" : "AI-estimated"} DL speed:</b> ${v != null ? v.toFixed(1) : "—"} Mbps`;
   }
 
-  const primary = { qoe: "QoE", demand: "Demand", hotspot: "Hotspot", moran: "Moran", risk: "Risk" }[state.colorBy];
+  const primary = { qoe: "QoE", demand: "Scenario Pressure", hotspot: "Hotspot", moran: "Moran", risk: "Risk" }[state.colorBy];
   const val = cellValue(
     { qoe: "qoe", demand: "demand_pressure", hotspot: "hotspot_code", moran: "moran_code", risk: "next_hour_degraded_historical" }[state.colorBy],
     t, c
@@ -838,36 +886,23 @@ function hoverHtml(h3) {
 function popupHtml(h3) {
   const c = state.h3IndexOf.get(h3);
   const t = state.currentT;
-  const props = state.gridPropsByH3.get(h3);
   const realQoe = cellValue("qoe", t, c);
   const eff = effectiveMetrics(t, c);
   const showEff = state.profile !== "balanced" || state.whatIfEnabled;
   const sq = cellValue("degradation_class", t, c);
-  const giz = cellValue("gi_star_z", t, c);
-  const hotspotLabel = state.panel.hotspot_code_labels[cellValue("hotspot_code", t, c)];
   const classLabel = ["Normal", "Degraded", "Severe"][sq] ?? "—";
-  const signalScores = causeScoresForCell(t, c, h3);
-  const causes = triggeredCauses(signalScores);
-  const cause = causes[0] || "none";
   const qoeText = realQoe != null ? realQoe.toFixed(0) : "—";
   const demandText = eff.demand != null ? eff.demand.toFixed(0) : "—";
   const rtt = cellValue("rtt_ms", t, c);
-  const loss = cellValue("loss_pct", t, c);
-  const previousQoe = t > 0 ? cellValue("qoe", t - 1, c) : null;
-  const qoeChange = realQoe != null && previousQoe != null && previousQoe !== 0 ? ((realQoe - previousQoe) / previousQoe) * 100 : null;
   const qoeTone = realQoe == null ? "metric-muted" : realQoe < 50 ? "metric-critical" : realQoe < 70 ? "metric-watch" : "metric-good";
   const demandTone = eff.demand == null ? "metric-muted" : eff.demand >= 15 ? "metric-critical" : eff.demand >= 11 ? "metric-watch" : "metric-good";
   const rttTone = rtt == null ? "metric-muted" : rtt >= 70 ? "metric-critical" : rtt >= 45 ? "metric-watch" : "metric-good";
-  const towerTone = props.tower_count == null ? "metric-muted" : props.tower_count === 0 ? "metric-critical" : props.tower_count < 2 ? "metric-watch" : "metric-good";
   return `
     <div class="cell-popup">
       <div class="cell-popup-header"><strong>${cellName(h3)}</strong><span class="cell-status status-${classLabel.toLowerCase()}">${classLabel}</span></div>
-      <div class="cell-popup-metrics"><span class="${qoeTone}"><b>${qoeText}</b>QoE</span><span class="${demandTone}"><b>${demandText}</b>Demand</span><span class="${rttTone}"><b>${rtt?.toFixed?.(0) ?? "—"}ms</b>RTT</span><span class="${towerTone}"><b>${props.tower_count ?? "—"}</b>Towers</span></div>
-      <div class="cell-popup-section"><span>Primary investigation hypothesis · Demo / Scenario</span><strong>${CAUSE_LABELS[cause]}</strong><p>${causes.length > 1 ? `Supporting signals: ${causes.slice(1).map(key => CAUSE_LABELS[key]).join(" · ")}` : "No additional supporting signal"} · ${hotspotLabel ?? "No hotspot label"}</p></div>
-      <div class="cell-popup-section evidence"><span>Evidence</span><ul><li>QoE ${qoeText}/100 (${qoeChange == null ? "no prior-hour comparison" : `${qoeChange >= 0 ? "+" : ""}${qoeChange.toFixed(0)}% versus prior hour`}) · demand ${demandText}</li><li>RTT ${rtt?.toFixed?.(0) ?? "—"}ms · loss ${loss?.toFixed?.(1) ?? "—"}%</li><li>Gi* z-score ${giz?.toFixed?.(2) ?? giz ?? "—"} · population ${Math.round(props.population_day ?? 0).toLocaleString()}</li></ul></div>
-      <div class="cell-popup-action"><span>Recommended next step</span><p>${ACTIONS[cause]}</p></div>
+      <div class="cell-popup-metrics"><span class="${qoeTone}"><b>${qoeText}</b>QoE</span><span class="${demandTone}"><b>${demandText}</b>Scenario Pressure</span><span class="${rttTone}"><b>${rtt?.toFixed?.(0) ?? "—"}ms</b>RTT</span></div>
+      <div class="cell-popup-note">Quick map context · full quarterly status, model contributors and investigation guidance are shown in Cell Intelligence.</div>
       ${showEff ? `<div class="cell-popup-note">Active profile: ${state.profile}${state.whatIfEnabled ? " · what-if capacity active" : ""} · effective QoE ${eff.qoe?.toFixed?.(0) ?? "—"}</div>` : ""}
-      <details class="cell-popup-details"><summary>AI model and technical detail</summary>${aiPopupSection(c)}</details>
     </div>
   `;
 }
@@ -885,9 +920,9 @@ function aiPopupSection(c) {
     const drivers = [1, 2, 3].map(n => ({ label: onsetValue(`risk_driver_${n}_label`, c), value: onsetValue(`risk_driver_${n}_value`, c), family: onsetValue(`risk_driver_${n}_family`, c) })).filter(row => row.label != null);
     return `<hr style="margin:6px 0"/><span class="cheat-badge ai" style="font-size:9px">AI MODEL · QUARTERLY</span><br/>
       Emerging risk: <b>${ONSET_TIER_LABELS[tier] ?? "Not eligible"}</b>${rank != null ? ` · Rank <b>#${rank}</b> of ${state.finals.metadata.eligible_cells?.toLocaleString?.() ?? "—"}` : ""}<br/>
-      Measurement support: <b>${support ?? "Unavailable"}</b>${tests != null ? ` · ${tests} Ookla tests` : ""}
-      ${drivers.length ? `<div class="ai-explain-block"><div class="ai-explain-title">Factors contributing to the model's emerging-risk assessment</div>${drivers.map(row => `<div class="explain-signal">${row.label}: <b>${row.value ?? "—"}</b>${row.family ? ` · ${row.family}` : ""}</div>`).join("")}</div>` : ""}
-      <span style="font-size:10px;color:#64748b">SHAP contributors explain the model's risk assessment; they do not identify engineering causes. The final model uses 2026Q1 context to forecast emerging underperformance in 2026Q2.</span>`;
+      Quarterly measurement support: <b>${support ?? "Unavailable"}</b>${tests != null ? ` · ${tests} Ookla tests` : ""}
+      ${drivers.length ? `<div class="ai-explain-block"><div class="ai-explain-title">Top model contributors</div>${drivers.map(row => `<div class="explain-signal"><b>${row.label}</b><span>Observed value: ${formatModelObservedValue(row.label, row.value)}</span><em>↑ Higher risk</em></div>`).join("")}</div>` : ""}
+      <span style="font-size:10px;color:#64748b">These factors are contributors to the model's risk assessment. They influenced its ranking and do not establish engineering cause. The final model uses 2026Q1 context to forecast emerging underperformance in 2026Q2.</span>`;
   }
   const status = onsetValue("static_data_status", c);
   const dl = onsetValue("display_dl_mbps", c);
@@ -957,7 +992,7 @@ function renderMapColors() {
       style.color = "#805ad5";
       style.weight = 0.8;
     }
-    if (state.onset && state.colorBy === "onset" && onsetValue("alert_at_frozen_threshold", c)) {
+    if (state.onset && state.colorBy === "onset" && state.quarterlyMapView !== "observed" && onsetValue("alert_at_frozen_threshold", c)) {
       style.color = "#742a2a";
       style.weight = 1.4;
     }
@@ -976,7 +1011,7 @@ function renderMapColors() {
     if (state.colorBy === "qoe" && qoe <= 45) glowClass = "map-glow-red";
     if (state.colorBy === "demand" && demand >= peakDemand - .25) glowClass = "map-glow-warm";
     if (state.colorBy === "hotspot" && (hotspot >= 5 || emerging)) glowClass = emerging ? "map-glow-orange" : "map-glow-red";
-    if (state.colorBy === "onset" && state.onset && (onsetValue("onset_risk_rank", c) ?? Infinity) <= 5) glowClass = "map-glow-violet";
+    if (state.colorBy === "onset" && state.quarterlyMapView !== "observed" && state.onset && (onsetValue("onset_risk_rank", c) ?? Infinity) <= 5) glowClass = "map-glow-violet";
     if (glowClass) path.classList.add(glowClass);
   });
 }
@@ -1005,9 +1040,13 @@ function renderLegend() {
     html = `<span><span class="swatch" style="background:#e53e3e"></span>Degraded next hour (historical)</span>
             <span><span class="swatch" style="background:#38a169"></span>Not degraded next hour</span>`;
   } else if (state.colorBy === "onset") {
-    html = (state.finalsActualRevealed
+    if (state.quarterlyMapView === "observed") {
+      html = `<span><span class="swatch" style="background:#7f1d1d"></span>Underperforming · 2026Q1</span><span><span class="swatch" style="background:#dfe9e5"></span>Not underperforming · 2026Q1</span><span><span class="swatch" style="background:#e2e8f0"></span>Not measured</span><span class="legend-note"><b>Observed quarterly status only.</b></span>`;
+    } else if (state.quarterlyMapView === "forecast") {
+      html = Object.entries(ONSET_TIER_COLORS).map(([k, c]) => `<span><span class="swatch" style="background:${c}"></span>${k === "high" ? "High risk" : k === "elevated" ? "Elevated" : k === "lower" ? "Lower risk" : "Not evaluated"}</span>`).join("") + `<span class="legend-note"><b>2026Q2 AI priority among cells not underperforming in 2026Q1.</b> Ranks are not probabilities.</span>`;
+    } else html = (state.finalsActualRevealed
       ? Object.entries(TIME_MACHINE_COLORS).map(([k, c]) => `<span><span class="swatch" style="background:${c}"></span>${timeMachineLabel(k)}</span>`).join("") + `<span><span class="swatch" style="background:#7f1d1d"></span>Already underperforming in 2026Q1</span>`
-      : `<span><span class="swatch" style="background:#7f1d1d"></span>Current issue</span>` + Object.entries(ONSET_TIER_COLORS).map(([k, c]) =>
+      : `<span><span class="swatch" style="background:#7f1d1d"></span>Observed issue · 2026Q1</span>` + Object.entries(ONSET_TIER_COLORS).map(([k, c]) =>
         `<span><span class="swatch" style="background:${c}"></span>${k === "high" ? "High risk" : k === "elevated" ? "Elevated" : k === "lower" ? "Lower risk" : "Not scored"}</span>`).join("")) +
       (state.finals
         ? `<span class="legend-note"><b>${state.finalsActualRevealed ? "2026Q2 actual outcome check" : "2026Q1 observed status + 2026Q2 AI priority"}.</b> Forecast ranks are not probabilities.</span>`
@@ -1150,6 +1189,9 @@ function playMapFlyRing(props) {
 }
 
 function selectArea(h3) {
+  if (state.activeHoverLayer) state.activeHoverLayer.closeTooltip();
+  state.activeHoverLayer = null;
+  state.map?.closePopup();
   state.selectedH3 = h3;
   state.insightTab = "overview";
   renderMapColors();
@@ -1180,7 +1222,7 @@ function syncActiveToolSelection() {
   }
   const quarterly = state.analysisContext === "quarterly";
   const contextMetrics = quarterly
-    ? `Observed status: ${onsetValue("current_status", c) === "currently_underperforming" ? "Underperforming" : "Currently normal"} · AI rank ${onsetValue("onset_risk_rank", c) != null ? `#${Math.round(onsetValue("onset_risk_rank", c))}` : "not scored"}`
+    ? `2026Q1 observed: ${onsetValue("current_status", c) === "currently_underperforming" ? "Underperforming" : "Not underperforming"} · 2026Q2 AI rank ${onsetValue("onset_risk_rank", c) != null ? `#${Math.round(onsetValue("onset_risk_rank", c))}` : "not evaluated"}`
     : `Scenario QoE ${cellValue("qoe", state.currentT, c)?.toFixed(0) ?? "—"} · Scenario pressure ${cellValue("demand_pressure", state.currentT, c)?.toFixed(0) ?? "—"} · ${new Date(state.cityTS[state.currentT].timestamp).toUTCString().slice(5, 22)}`;
   context.innerHTML = `<i class="bi bi-geo-alt-fill"></i><strong>${cellName(h3)}</strong><span>${contextMetrics}</span>`;
   context.classList.remove("selection-flash");
@@ -1205,17 +1247,8 @@ function syncMapSelectedBar() {
   const h3 = state.selectedH3;
   const c = state.h3IndexOf.get(h3);
   if (!h3 || c == null) { bar.classList.add("d-none"); return; }
-  const quarterly = state.analysisContext === "quarterly";
-  const qoe = cellValue("qoe", state.currentT, c);
-  const demand = cellValue("demand_pressure", state.currentT, c);
-  const demandLabel = demand >= 15 ? "High" : demand >= 11 ? "Medium" : "Normal";
-  const currentStatus = onsetValue("current_status", c) === "currently_underperforming" ? "Underperforming" : "Currently normal";
-  const aiRank = onsetValue("onset_risk_rank", c);
-  const metricHtml = quarterly
-    ? `<span>Observed <b>${currentStatus}</b></span><span>AI rank <b>${aiRank != null ? `#${Math.round(aiRank)}` : "Not scored"}</b></span>`
-    : `<span>Scenario QoE <b>${qoe?.toFixed(1) ?? "—"}</b></span><span>Scenario pressure <b class="demand-${demandLabel.toLowerCase()}">${demandLabel}</b></span>`;
   bar.classList.remove("d-none");
-  bar.innerHTML = `<span class="selected-kicker"><i></i> Active cell</span><strong>${cellName(h3)}</strong><code>${h3.slice(0, 10)}…</code>${metricHtml}<button onclick="clearSelectedArea()" aria-label="Clear selected location">×</button>`;
+  bar.innerHTML = `<span class="selected-kicker"><i></i> Active cell</span><strong>${cellName(h3)}</strong><button onclick="clearSelectedArea()" aria-label="Clear selected location">×</button>`;
 }
 
 function syncMapWorkspaceInsight() {
@@ -1228,7 +1261,7 @@ function syncMapWorkspaceInsight() {
     const demand = cellValue("demand_pressure", state.currentT, c);
     const quarterly = state.analysisContext === "quarterly";
     const detail = quarterly
-      ? `Observed ${onsetValue("current_status", c) === "currently_underperforming" ? "underperformance" : "currently normal"} · AI rank ${onsetValue("onset_risk_rank", c) != null ? `#${Math.round(onsetValue("onset_risk_rank", c))}` : "not scored"}`
+      ? `2026Q1 observed ${onsetValue("current_status", c) === "currently_underperforming" ? "underperformance" : "not underperforming"} · 2026Q2 AI rank ${onsetValue("onset_risk_rank", c) != null ? `#${Math.round(onsetValue("onset_risk_rank", c))}` : "not evaluated"}`
       : `Scenario QoE ${qoe?.toFixed(1) ?? "—"} · pressure ${demand?.toFixed(1) ?? "—"}`;
     el.innerHTML = `<i class="bi bi-hexagon-fill"></i><span><b>${cellName(h3)}</b> active</span><small>${detail}</small>`;
   } else {
@@ -1308,13 +1341,13 @@ function renderComparePanel() {
   const demandBand = value => value >= 15 ? "High" : value >= 11 ? "Medium" : "Low";
   const metricRows = [
     { label: "Scenario QoE", value: r => r.qoe?.toFixed(0) ?? "—", pct: r => Math.max(0, Math.min(100, r.qoe ?? 0)), className: "qoe" },
-    { label: "Scenario pressure", value: r => demandBand(r.demand ?? 0), pct: r => Math.max(0, Math.min(100, (r.demand ?? 0) * 5)), className: "demand" },
+    { label: "Scenario Pressure", value: r => demandBand(r.demand ?? 0), pct: r => Math.max(0, Math.min(100, (r.demand ?? 0) * 5)), className: "demand" },
     { label: "Scenario RTT", value: r => r.rtt != null ? `${r.rtt.toFixed(0)} ms` : "—", pct: r => Math.max(0, Math.min(100, (r.rtt ?? 0) / 1.2)), className: "rtt" },
     { label: "Scenario loss", value: r => r.loss != null ? `${r.loss.toFixed(1)}%` : "—", pct: r => Math.max(0, Math.min(100, (r.loss ?? 0) * 25)), className: "loss" },
     { label: "AI Rank", value: r => r.aiRank != null ? `#${Math.round(r.aiRank)}` : "Not scored", pct: r => r.aiRank != null ? Math.max(10, 100 - Math.min(100, r.aiRank / 3)) : 0, className: "ai" },
   ];
   tableEl.innerHTML = `<div class="compare-guidance compact"><strong>${state.compareCells.length} / ${COMPARE_MAX} selected</strong><p>Hourly scenario metrics use the selected timeline hour. Quarterly AI rank uses the finals forecast context.</p></div>
-    <div class="compare-verdict"><strong>Scenario comparison</strong><p><b>${cellName(bestQoe.h3)}</b> has the strongest current-hour QoE (${bestQoe.qoe?.toFixed(0) ?? "—"}). <b>${cellName(lowestDemand.h3)}</b> has the lowest scenario pressure (${lowestDemand.demand?.toFixed(0) ?? "—"}).${qoeGap != null ? ` The QoE gap between best and weakest selected cells is <b>${qoeGap.toFixed(0)} points</b>.` : ""}</p><small>Hourly scenario comparison; quarterly AI rank is labelled separately.</small></div>
+    <div class="compare-verdict"><strong>Scenario comparison</strong><p><b>${cellName(bestQoe.h3)}</b> has the strongest current-hour QoE (${bestQoe.qoe?.toFixed(0) ?? "—"}). <b>${cellName(lowestDemand.h3)}</b> has the lowest Scenario Pressure (${lowestDemand.demand?.toFixed(0) ?? "—"}).${qoeGap != null ? ` The QoE gap between best and weakest selected cells is <b>${qoeGap.toFixed(0)} points</b>.` : ""}</p><small>Hourly scenario comparison; quarterly AI rank is labelled separately.</small></div>
     <div class="compare-visual" style="--compare-cols:${rows.length}">
       <div class="compare-visual-head"><span>Metric</span>${rows.map((r, i) => `<span class="${r.h3 === state.selectedH3 ? "active-compare-cell" : ""}"><b>Cell ${String.fromCharCode(65 + i)}${r.h3 === state.selectedH3 ? " · Active" : ""}</b><small>${cellName(r.h3)}</small><button onclick="toggleCompareCell('${r.h3}')" aria-label="Remove ${cellName(r.h3)}">×</button></span>`).join("")}</div>
       ${metricRows.map((metric, metricIndex) => `<div class="compare-metric-row ${metricIndex === 4 ? "quarterly-metric-start" : ""}"><strong>${metric.label}</strong>${rows.map(r => `<span class="${r.h3 === state.selectedH3 ? "active-compare-cell" : ""}"><b>${metric.value(r)}</b><i class="compare-bar ${metric.className}"><em style="width:${metric.pct(r)}%"></em></i></span>`).join("")}</div>`).join("")}
@@ -1368,7 +1401,7 @@ function buildCharts() {
   Plotly.newPlot("chartDemand", [{
     x: ts, y: series.map(r => r.avg_demand_pressure),
     type: "scatter", mode: "lines", fill: "tozeroy",
-    line: { color: "#d69e2e" }, name: "Avg Demand Pressure",
+    line: { color: "#d69e2e" }, name: "Average Scenario Pressure",
   }], plotlyLayout("Average Scenario Pressure Index"), plotlyConfig());
 
   Plotly.newPlot("chartSeverity", [
@@ -1387,6 +1420,24 @@ function buildCharts() {
     });
   });
   updateChartRangeShading();
+}
+
+function syncOperatorChartTheme() {
+  if (!window.Plotly) return;
+  const colors = getComputedStyle(document.body);
+  const foreground = colors.getPropertyValue("--op-secondary").trim();
+  const surface = colors.getPropertyValue("--op-surface").trim();
+  const border = colors.getPropertyValue("--op-border").trim();
+  document.querySelectorAll(".js-plotly-plot").forEach(plot => {
+    if (!plot.layout || !plot.offsetWidth || !plot.offsetHeight) return;
+    Plotly.relayout(plot, {
+      paper_bgcolor: surface, plot_bgcolor: surface,
+      "font.family": "Segoe UI, Arial, sans-serif", "font.color": foreground,
+      "title.font.color": foreground,
+      "xaxis.gridcolor": border, "yaxis.gridcolor": border,
+      "xaxis.tickfont.color": foreground, "yaxis.tickfont.color": foreground,
+    });
+  });
 }
 
 function plotlyLayout(title) {
@@ -1506,7 +1557,7 @@ function renderKpis() {
   // Degraded Cells cards up top (exec overview row) — no need to repeat
   // them here, so this row sticks to the metrics that are unique to it.
   const cards = [
-    { label: "Peak Demand Pressure", value: peakDemand.toFixed(0), delta: "", status: statusClass(100 - peakDemand, 30, 15) },
+    { label: "Peak Scenario Pressure", value: peakDemand.toFixed(0), delta: "", status: statusClass(100 - peakDemand, 30, 15) },
     { label: "Population Affected", value: Math.round(popAffected).toLocaleString(), delta: "", status: statusClass(1, 1, 0) },
     { label: "Total Cells", value: C.toLocaleString(), delta: "", status: "status-green" },
     { label: "Ookla-Anchored Cells", value: anchoredPct + "%", delta: "", status: statusClass(anchoredPct, 50, 25) },
@@ -1540,8 +1591,8 @@ function renderKpis() {
       `<div><span>Average QoE</span><b>${cur.avg_qoe?.toFixed(0)} <i>→</i> ${(whatIfQoeSum / whatIfN).toFixed(0)}</b><small>${qoeDelta >= 0 ? "+" : ""}${qoeDelta.toFixed(1)} points</small></div></div>`;
     const avgProjectedDemand = whatIfDemandSum / whatIfN;
     document.getElementById("whatIfExplanation").innerHTML = state.whatIfPct >= 0
-      ? `<strong>Model response</strong><p>Extra capacity reduces the model's demand-pressure proxy from ${cur.avg_demand_pressure?.toFixed(1) ?? "—"} to ${avgProjectedDemand.toFixed(1)}. Under these illustrative assumptions, the calculation increases download throughput and reduces RTT, jitter and loss. These are scenario responses, not measured intervention outcomes.</p>`
-      : `<strong>Model response</strong><p>Less capacity raises the demand-pressure proxy from ${cur.avg_demand_pressure?.toFixed(1) ?? "—"} to ${avgProjectedDemand.toFixed(1)}. The model therefore reduces download throughput and increases RTT, jitter, and loss first in high-load cells.</p>`;
+      ? `<strong>Model response</strong><p>Extra capacity reduces the Scenario Pressure proxy from ${cur.avg_demand_pressure?.toFixed(1) ?? "—"} to ${avgProjectedDemand.toFixed(1)}. Under these illustrative assumptions, the calculation increases download throughput and reduces RTT, jitter and loss. These are scenario responses, not measured operational outcomes.</p>`
+      : `<strong>Model response</strong><p>Less capacity raises the Scenario Pressure proxy from ${cur.avg_demand_pressure?.toFixed(1) ?? "—"} to ${avgProjectedDemand.toFixed(1)}. The model therefore reduces download throughput and increases RTT, jitter, and loss first in high-pressure cells.</p>`;
   } else {
     document.getElementById("whatIfSummary").innerHTML = "";
     document.getElementById("whatIfExplanation").innerHTML = "";
@@ -1809,7 +1860,7 @@ function renderRootCause() {
   }
   const leading = [...sorted].sort((a, b) => counts[b] - counts[a]);
   document.getElementById("rootCauseSummary").innerHTML =
-    `<b>Key takeaway:</b> ${CAUSE_LABELS[leading[0]]} is the most common relative investigation signal: <b>${counts[leading[0]]}</b> of <b>${nDegraded}</b> degraded cells (${(100 * counts[leading[0]] / nDegraded).toFixed(0)}%). <b>${noSignal}</b> cells have no strong relative signal. Scenario measurement support is shown separately.`;
+    `<b>Key takeaway:</b> ${CAUSE_LABELS[leading[0]]} is the most common relative investigation signal: <b>${counts[leading[0]]}</b> of <b>${nDegraded}</b> degraded cells (${(100 * counts[leading[0]] / nDegraded).toFixed(0)}%). <b>${noSignal}</b> cells have no strong relative signal. Scenario evidence coverage is shown separately.`;
 }
 
 // ---------------------------------------------------------------------
@@ -1900,7 +1951,7 @@ function renderInterventionsLegacy() {
             <span class="urgency-pill urgency-${urgency}">${tier.p} · ${urgency.toUpperCase()}</span>
           </div>
           <div class="intervention-section intervention-problem"><span>Problem</span><strong>${CAUSE_LABELS[cause]}</strong><p>Service class: ${["Normal", "Degraded", "Severe"][cand.cls]}</p></div>
-          <div class="intervention-section intervention-evidence"><span>Evidence</span><div class="evidence-chips"><b>QoE ${cand.qoe?.toFixed(0) ?? "—"}</b><b>Demand ${cand.demand?.toFixed(0) ?? "—"}</b><b>RTT ${cand.rtt?.toFixed(0) ?? "—"}ms</b><b>Population ${Math.round(cand.population).toLocaleString()}</b></div><p>Persistent hotspot: ${persistentHotspot}${aiEvidence}</p></div>
+          <div class="intervention-section intervention-evidence"><span>Evidence</span><div class="evidence-chips"><b>QoE ${cand.qoe?.toFixed(0) ?? "—"}</b><b>Scenario Pressure ${cand.demand?.toFixed(0) ?? "—"}</b><b>RTT ${cand.rtt?.toFixed(0) ?? "—"}ms</b><b>Population ${Math.round(cand.population).toLocaleString()}</b></div><p>Persistent hotspot: ${persistentHotspot}${aiEvidence}</p></div>
           <div class="intervention-section intervention-action"><span>Recommended action</span><p>${ACTIONS[cause]}</p></div>
           <details class="intervention-details"><summary>Operational detail</summary><p><b>Contact:</b> ${contact}</p><p class="cost-note"><b>Illustrative cost range:</b> ${ILLUSTRATIVE_COST_RANGES[cause]}</p></details>
         </div>
@@ -1981,10 +2032,10 @@ function renderInterventions() {
     return `<article class="intervention-card urgency-${cand.urgency}${status === "done" ? " is-done" : ""}">
       <button class="intervention-main" onclick="flyToCell('${cand.h3}')"><span class="intervention-rank">${String(i + 1).padStart(2, "0")}</span><span class="intervention-location">${cellName(cand.h3)}</span><span class="urgency-pill urgency-${cand.urgency}">${tierMeta[cand.urgency]}</span></button>
       <div class="intervention-section intervention-problem"><span>Primary investigation hypothesis</span><strong>${CAUSE_LABELS[cand.cause]}</strong></div>
-      <div class="intervention-support">Measurement support · <b>${cand.support.label}</b></div>
+      <div class="intervention-support">Scenario evidence coverage · <b>${cand.support.label}</b></div>
       <div class="intervention-section intervention-evidence"><span>Scenario metrics</span><div class="evidence-chips"><b>QoE ${cand.qoe?.toFixed(0) ?? "—"}</b><b>Pressure ${cand.demand?.toFixed(0) ?? "—"}</b><b>RTT ${cand.rtt?.toFixed(0) ?? "—"} ms</b><b>Population ${Math.round(cand.population).toLocaleString()}</b></div><p><b>Why prioritised:</b> ${severity} with ${populationContext}.</p></div>
       <div class="intervention-section intervention-action"><span>Recommended next step</span><p>${ACTIONS[cand.cause]}</p></div>
-      <details class="intervention-details"><summary>Operational detail</summary><div><p><b>Scenario measurement support:</b> ${cand.support.label} (${cand.confidence != null ? `${(cand.confidence * 100).toFixed(0)}%` : "unavailable"})</p><p><b>Supporting signals:</b> ${supportingSignals.length ? supportingSignals.join(" · ") : "None"}</p><p><b>Signal percentiles:</b> ${signalSummary}</p><p><b>Quarterly AI context:</b> ${quarterlyContext}</p><p><b>Persistent scenario hotspot:</b> ${persistentHotspot}</p><p><b>Signal threshold:</b> citywide 75th percentile for the selected scenario hour</p><p><b>Packet loss:</b> ${cand.loss?.toFixed(2) ?? "—"}%</p><p><b>Contact:</b> ${OPERATOR_CONTACTS[cand.h3] || "Escalate to network operations; no per-cell operator field is available."}</p><p class="cost-note"><b>Illustrative cost range:</b> ${ILLUSTRATIVE_COST_RANGES[cand.cause] ?? "Determine after validation"}</p></div></details>
+      <details class="intervention-details"><summary>Operational detail</summary><div><p><b>Scenario evidence coverage:</b> ${cand.support.label} (${cand.confidence != null ? `${(cand.confidence * 100).toFixed(0)}%` : "unavailable"})</p><p><b>Supporting signals:</b> ${supportingSignals.length ? supportingSignals.join(" · ") : "None"}</p><p><b>Signal percentiles:</b> ${signalSummary}</p><p><b>Quarterly AI context:</b> ${quarterlyContext}</p><p><b>Persistent scenario hotspot:</b> ${persistentHotspot}</p><p><b>Signal threshold:</b> citywide 75th percentile for the selected scenario hour</p><p><b>Packet loss:</b> ${cand.loss?.toFixed(2) ?? "—"}%</p><p><b>Contact:</b> ${OPERATOR_CONTACTS[cand.h3] || "Escalate to network operations; no per-cell operator field is available."}</p><p class="cost-note"><b>Illustrative cost range:</b> ${ILLUSTRATIVE_COST_RANGES[cand.cause] ?? "Determine after validation"}</p></div></details>
       <div class="track-actions"><button class="${!status || status === "planned" ? "active" : ""}" onclick="setTracking('${cand.h3}','planned')">Active</button><button class="${status === "investigating" ? "active" : ""}" onclick="setTracking('${cand.h3}','investigating')">Investigating</button><button class="${status === "done" ? "active" : ""}" onclick="setTracking('${cand.h3}','done')">Resolved</button></div>
     </article>`;
   }).join("");
@@ -2017,6 +2068,7 @@ function setTracking(h3, status) {
   renderInterventions();
   renderPriorityActionCentre();
   renderExecOverview();
+  if (state.workspaceTool === "prioritise") renderQuarterlyQueue();
   if (h3 === state.selectedH3) {
     renderSelectedAreaInsights();
     syncWorkspaceSelection();
@@ -2126,15 +2178,15 @@ function renderAiPanel() {
     if (!bandRows[state.aiForecastBandFilter]) state.aiForecastBandFilter = "high";
     const counts = { high: high.length, elevated: elevated.length, lower: lower.length };
     const filters = document.getElementById("aiForecastBandFilters");
-    if (filters) filters.innerHTML = ["high", "elevated", "lower"].map(band => `<button class="ai-band-chip band-${band}${state.aiForecastBandFilter === band ? " active" : ""}" onclick="setAiForecastBand('${band}')"><span>${band === "lower" ? "Lower" : band[0].toUpperCase() + band.slice(1)}</span><b>${counts[band].toLocaleString()}</b></button>`).join("");
+    if (filters) filters.innerHTML = ["high", "elevated", "lower"].map(band => `<button class="ai-band-chip band-${band}${state.aiForecastBandFilter === band ? " active" : ""}" aria-pressed="${state.aiForecastBandFilter === band}" onclick="setAiForecastBand('${band}')"><span>${band === "lower" ? "Lower" : band[0].toUpperCase() + band.slice(1)}</span><b>${counts[band].toLocaleString()}</b></button>`).join("");
     const selectedRows = bandRows[state.aiForecastBandFilter];
     const queue = document.getElementById("aiDegradedNowList");
     const visibleRows = state.aiForecastExpanded ? selectedRows : selectedRows.slice(0, 5);
-    if (queue) queue.innerHTML = selectedRows.length ? visibleRows.map(row => `<li class="ai-queue-item band-${row.tier}" onclick="flyToCell('${row.h3}')"><span class="rank-badge rank-${row.tier === "high" ? "critical" : row.tier === "elevated" ? "watch" : "standard"}">${String(Math.round(row.rank)).padStart(2,"0")}</span><span class="ai-queue-place"><b>${cellName(row.h3)}</b>${row.support ? `<small>Measurement support · ${row.support}</small>` : ""}</span><span class="ai-queue-band">${ONSET_TIER_LABELS[row.tier] ?? row.tier}</span><i class="bi bi-chevron-right"></i></li>`).join("") + (selectedRows.length > 5 ? `<li class="ranked-list-toggle"><button onclick="toggleAiForecastList()">${state.aiForecastExpanded ? "Show less" : `Show more (${selectedRows.length.toLocaleString()})`}</button></li>` : "") : `<li class="text-muted">No cells in this risk band.</li>`;
+    if (queue) queue.innerHTML = selectedRows.length ? visibleRows.map(row => `<li role="button" tabindex="0" class="ai-queue-item band-${row.tier}" onclick="flyToCell('${row.h3}')"><span class="rank-badge rank-${row.tier === "high" ? "critical" : row.tier === "elevated" ? "watch" : "standard"}">${String(Math.round(row.rank)).padStart(2,"0")}</span><span class="ai-queue-place"><b>${cellName(row.h3)}</b></span><span class="ai-queue-band">${ONSET_TIER_LABELS[row.tier] ?? row.tier}</span><i class="bi bi-chevron-right"></i></li>`).join("") + (selectedRows.length > 5 ? `<li class="ranked-list-toggle"><button onclick="toggleAiForecastList()">${state.aiForecastExpanded ? "Show less" : `Show more (${selectedRows.length.toLocaleString()})`}</button></li>` : "") : `<li class="text-muted">No cells in this risk band.</li>`;
     const queueHeading = document.getElementById("aiQueueHeading");
     if (queueHeading) queueHeading.textContent = `${state.aiForecastBandFilter === "lower" ? "Lower" : state.aiForecastBandFilter[0].toUpperCase() + state.aiForecastBandFilter.slice(1)}-risk investigation queue`;
     document.getElementById("aiModelBehaviorBadge").innerHTML = `✦ <b>Finals quarterly XGBoost:</b> ranks currently non-underperforming cells by emerging underperformance risk; raw scores are not displayed as probabilities.`;
-    document.getElementById("aiSnapshotNote").innerHTML = `<b>${rows.length.toLocaleString()} currently-normal cells</b> ranked for emerging underperformance in ${state.finals.metadata.forecast_quarter}. <span>Ranks are not probabilities.</span> <button class="ai-reveal-link" onclick="setWorkspaceTool('overview')">View observed issues in Reveal</button>`;
+    document.getElementById("aiSnapshotNote").innerHTML = `<b>${rows.length.toLocaleString()} evaluable cells</b> ranked for emerging underperformance in ${state.finals.metadata.forecast_quarter}. <span>Ranks are not probabilities.</span> <button class="ai-reveal-link" onclick="setWorkspaceTool('overview')">View observed issues in Reveal</button>`;
     const activeNotice = document.getElementById("aiActiveCellNotice");
     const activeIndex = state.h3IndexOf.get(state.selectedH3);
     const activeUnderperforming = activeIndex != null && onsetValue("current_status", activeIndex) === "currently_underperforming";
@@ -2199,16 +2251,53 @@ function timeMachineLabel(value) {
   })[value] || "Not available";
 }
 
+function formatModelObservedValue(label, value) {
+  if (value == null || value === "") return "—";
+  const text = String(value).trim();
+  const number = Number.parseFloat(text.replaceAll(",", ""));
+  if (!Number.isFinite(number)) return text;
+  const name = String(label || "").toLowerCase();
+  if (name.includes("built-up ratio")) return `${(number <= 1 ? number * 100 : number).toFixed(1)}%`;
+  if (name.includes("viirs") || name.includes("human-activity")) return number.toFixed(1);
+  if (name.includes("population")) return Math.round(number).toLocaleString();
+  if (name.includes("underperformance rate") || name.includes("share") || name.includes("rate")) return `${(number <= 1 ? number * 100 : number).toFixed(1)}%`;
+  if (name.includes("download") || name.includes("upload") || /mbps/i.test(text)) return `${number.toFixed(1)} Mbps`;
+  if (name.includes("latency") || name.includes("rtt") || /\bms\b/i.test(text)) return `${number.toFixed(1)} ms`;
+  if (name.includes("distance")) return `${number.toLocaleString(undefined, { maximumFractionDigits: 1 })}${/\bm\b/i.test(text) ? " m" : ""}`;
+  return number.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function modelContributorHtml(row, effect = "higher") {
+  const higher = effect === "higher";
+  return `<li class="model-contributor ${higher ? "risk-raising" : "risk-lowering"}"><div class="model-contributor-main"><b>${row.label}</b><small>Observed value</small><em>${formatModelObservedValue(row.label, row.value)}</em></div><strong><span>Model effect</span><b>${higher ? "↑ higher risk" : "↓ lower risk"}</b></strong></li>`;
+}
+
 function renderFinalsTimeMachine() {
   const el = document.getElementById("aiTimeMachineStatus");
   if (!el || !state.finals) return;
+  const eligible = state.finals.metadata.eligible_cells || 0;
+  const reviewTarget = state.finals.metadata.risk_thresholds?.elevated_max_rank || 200;
+  const reducedPct = eligible ? (100 * (eligible - reviewTarget) / eligible).toFixed(1) : "—";
   if (!state.finalsActualRevealed) {
-    el.innerHTML = `<div class="ai-time-machine-card"><div><span>Time Machine</span><b>Compare forecast with held-out outcomes</b><small>Reveal ${state.finals.metadata.forecast_quarter} only when ready.</small></div><button class="btn btn-sm btn-outline-primary" onclick="revealFinalsActual()">Reveal actual</button></div>`;
+    el.innerHTML = `<div class="ai-value-strip" aria-label="Investigation workload reduction"><div><span>Evaluable forecast cells</span><b>${eligible.toLocaleString()}</b></div><i class="bi bi-arrow-right"></i><div><span>Review first</span><b>Top ${reviewTarget}</b></div><strong>${reducedPct}% fewer cells to triage first</strong></div><div class="ai-time-machine-card"><div><span>Held-out validation · Time Machine</span><b>Forecast ${state.finals.metadata.predictor_quarter} → known ${state.finals.metadata.forecast_quarter} outcome</b><small>Reveal the held-out result used to evaluate the ranking; this is not live future data.</small></div><button class="btn btn-sm btn-outline-primary" onclick="revealFinalsActual()">Reveal held-out result</button></div>`;
     return;
   }
   const results = state.onset.fields.time_machine_result.filter(Boolean);
   const counts = results.reduce((all, value) => ({ ...all, [value]: (all[value] || 0) + 1 }), {});
-  el.innerHTML = `<div class="ai-time-machine-card revealed"><div><span>${state.finals.metadata.forecast_quarter} outcomes revealed</span><b>${timeMachineLabel("correctly_anticipated")}: ${counts.correctly_anticipated || 0} · ${timeMachineLabel("missed")}: ${counts.missed || 0}</b><small>False alerts: ${counts.false_alert || 0} · Correctly lower-risk: ${counts.correctly_lower_risk || 0}. Rank remains non-probabilistic.</small></div><span class="cheat-badge real">HELD-OUT</span></div>`;
+  const captured = counts.correctly_anticipated || 0;
+  const totalIssues = captured + (counts.missed || 0);
+  const reviewed = captured + (counts.false_alert || 0);
+  const top50 = state.onset.fields.onset_risk_rank.map((rank, c) => ({rank, result: state.onset.fields.time_machine_result[c]})).filter(r => r.rank != null && r.rank <= 50 && r.result);
+  const top50Hits = top50.filter(r => r.result === "correctly_anticipated").length;
+  const recallPct = totalIssues ? (100 * captured / totalIssues).toFixed(1) : "—";
+  const precisionPct = top50.length ? (100 * top50Hits / top50.length).toFixed(0) : "—";
+  el.innerHTML = `<div class="time-machine-outcomes" aria-label="Held-out forecast outcomes"><div class="outcome-correct"><i class="bi bi-check-circle-fill"></i><span>Correctly anticipated</span><b>${counts.correctly_anticipated || 0}</b></div><div class="outcome-alert"><i class="bi bi-exclamation-circle-fill"></i><span>False alert</span><b>${counts.false_alert || 0}</b></div><div class="outcome-missed"><i class="bi bi-x-circle-fill"></i><span>Missed</span><b>${counts.missed || 0}</b></div><div class="outcome-lower"><i class="bi bi-shield-check"></i><span>Correctly lower-risk</span><b>${counts.correctly_lower_risk || 0}</b></div></div><div class="time-machine-proof"><div><span>Top 200 reviewed</span><b>${reviewed} <small>/ ${results.length.toLocaleString()}</small></b></div><div><span>Emerging issues captured</span><b>${captured} <small>/ ${totalIssues}</small></b><em>${recallPct}%</em></div><div><span>Top-50 precision</span><b>${top50Hits} <small>/ ${top50.length}</small></b><em>${precisionPct}%</em></div></div><div class="ai-time-machine-card revealed"><div><span>Held-out ${state.finals.metadata.forecast_quarter} outcome</span><b>Forecast versus actual</b><small>The map now uses the four outcome categories. Ranking scores are not probabilities.</small></div><button class="btn btn-sm btn-outline-primary" onclick="hideFinalsActual()">Back to forecast</button></div>`;
+}
+
+function hideFinalsActual() {
+  state.finalsActualRevealed = false;
+  renderFinalsTimeMachine(); renderMapColors(); renderLegend(); syncPrimaryMapControls();
+  if (state.selectedH3) renderSelectedAreaInsights();
 }
 
 function revealFinalsActual() {
@@ -2256,10 +2345,10 @@ function renderDetectionComparison() {
       <div class="cmp-stat" style="color:#d69e2e"><div class="cmp-num">${counts.traditional_only}</div><div class="cmp-label">Traditional-only</div></div>
     </div>
     <p class="text-summary">${counts.ai_only > 0
-      ? `The AI model flags <b>${counts.ai_only} cell${counts.ai_only === 1 ? "" : "s"}</b> that traditional Gi* hotspot analysis does not — e.g. ${[...new Set(aiOnlyExamples.map(x => cellName(x.h3)))].join(", ")}${aiOnlyExamples.length < counts.ai_only ? ", …" : ""}. These are candidates where the onset model's time-series/demand features caught something a purely spatial statistic wouldn't.`
+      ? `The AI model flags <b>${counts.ai_only} cell${counts.ai_only === 1 ? "" : "s"}</b> that traditional Gi* hotspot analysis does not — e.g. ${[...new Set(aiOnlyExamples.map(x => cellName(x.h3)))].join(", ")}${aiOnlyExamples.length < counts.ai_only ? ", …" : ""}. These are candidates where the onset model's time-series and scenario-pressure features caught something a purely spatial statistic wouldn't.`
       : `At this snapshot hour, every AI-flagged cell is also a traditional Gi* hotspot — no AI-only detections to highlight.`}
       ${counts.traditional_only > 0 ? ` Conversely, <b>${counts.traditional_only}</b> traditional hotspots aren't in the AI's top risk tiers this hour — spatial clustering alone isn't the same signal as the onset model's ranking.` : ""}</p>
-    <div class="disclaimer-box mt-2">The AI model doesn't replace spatial analytics — it's a different lens (temporal/demand-driven vs. purely spatial) evaluated on the same simulated hour. Use "🤖 AI vs Hotspot" on the map's Color-by dropdown to see this spatially.</div>
+    <div class="disclaimer-box mt-2">The AI model doesn't replace spatial analytics — it's a different lens (temporal/scenario-pressure-driven versus purely spatial) evaluated on the same simulated hour. Use "🤖 AI vs Hotspot" on the map's Color-by dropdown to see this spatially.</div>
   `;
 }
 
@@ -2279,7 +2368,7 @@ function populateAiModelModal() {
       <table class="table table-sm"><tbody>
         <tr><td>Model version</td><td><b>${meta.model_version ?? "—"}</b></td></tr>
         <tr><td>Forecast window</td><td><b>${meta.predictor_quarter ?? "—"} → ${meta.forecast_quarter ?? "—"}</b></td></tr>
-        <tr><td>Eligible cells</td><td><b>${meta.eligible_cells?.toLocaleString?.() ?? "—"}</b></td></tr>
+        <tr><td>Evaluable forecast cells</td><td><b>${meta.eligible_cells?.toLocaleString?.() ?? "—"}</b></td></tr>
         <tr><td>Final PR-AUC</td><td><b>${test.pr_auc?.toFixed?.(3) ?? "—"}</b></td></tr>
         <tr><td>Final ROC-AUC</td><td><b>${test.roc_auc?.toFixed?.(3) ?? "—"}</b></td></tr>
         ${topK.map(row => `<tr><td>Top-${row.k} outcome</td><td><b>${row.captured_events} / ${row.k}</b> deteriorated (${pct(row.precision)})</td></tr>`).join("")}
@@ -2430,12 +2519,12 @@ function renderExecOverview() {
     if (onsetValue("measurement_support", c)) supported++;
   }
   const cards = [
-    { label: "Observed underperformance", value: `${observed.underperforming_cells?.toLocaleString?.() ?? "—"}`, sub: `${meta.predictor_quarter ?? "Current quarter"} real measurements · REVEAL` },
-    { label: "High emerging risk", value: highCutoff?.toLocaleString?.() ?? "—", sub: `${meta.forecast_quarter ?? "Next quarter"} currently-normal cells · ANTICIPATE` },
-    { label: "Elevated emerging risk", value: highCutoff != null && elevatedCutoff != null ? (elevatedCutoff - highCutoff).toLocaleString() : "—", sub: `Ranks ${(highCutoff ?? 0) + 1}–${elevatedCutoff ?? "—"}` },
-    { label: "Forecast eligible", value: meta.eligible_cells?.toLocaleString?.() ?? "—", sub: "Currently-normal cells included in AI ranking" },
+    { label: "Observed underperformance", value: `${observed.underperforming_cells?.toLocaleString?.() ?? "—"}`, sub: `NOW · ${meta.predictor_quarter ?? "Current quarter"}` },
+    { label: "High emerging risk", value: highCutoff?.toLocaleString?.() ?? "—", sub: `NEXT · ${meta.forecast_quarter ?? "Next quarter"}` },
+    { label: "Elevated emerging risk", value: highCutoff != null && elevatedCutoff != null ? (elevatedCutoff - highCutoff).toLocaleString() : "—", sub: `NEXT · ${meta.forecast_quarter ?? "Next quarter"}` },
+    { label: "Evaluable forecast cells", value: meta.eligible_cells?.toLocaleString?.() ?? "—", sub: "Currently normal with held-out next-quarter outcomes" },
     { label: "Measured cells", value: observed.measured_cells?.toLocaleString?.() ?? "—", sub: `${meta.predictor_quarter ?? "Current quarter"} Ookla coverage` },
-    { label: "Measurement support", value: supported.toLocaleString(), sub: "Forecast cells with a reported Ookla support band" },
+    { label: "Quarterly measurement support", value: supported.toLocaleString(), sub: "Forecast cells with a reported Ookla support band" },
     { label: "Demo / Scenario cells", value: C.toLocaleString(), sub: "Separate hourly M-Lab / cell_time_dataset view" },
   ];
 
@@ -2453,7 +2542,12 @@ function renderExecOverview() {
   }
   const additionalMetrics = document.getElementById("workspaceAdditionalMetrics");
   if (additionalMetrics) {
-    additionalMetrics.innerHTML = `<div class="coverage-strip">${cards.slice(4).map(c => `<div><span>${c.label}</span><b>${c.value}</b><small>${c.sub}</small></div>`).join("")}<p>Forecast eligible: <b>${cards[3].value}</b> currently-normal cells</p></div>`;
+    const measured = observed.measured_cells ?? 0;
+    const underperforming = observed.underperforming_cells ?? 0;
+    const currentlyNormal = measured - underperforming;
+    const evaluable = meta.eligible_cells ?? 0;
+    const unavailable = Math.max(0, currentlyNormal - evaluable);
+    additionalMetrics.innerHTML = `<div class="coverage-arithmetic"><div><span>Measured in ${meta.predictor_quarter}</span><b>${measured.toLocaleString()}</b></div><div><span>Observed underperforming</span><b>${underperforming.toLocaleString()}</b></div><div><span>Currently normal</span><b>${currentlyNormal.toLocaleString()}</b></div><div><span>Held-out ${meta.forecast_quarter} outcome available</span><b>${evaluable.toLocaleString()}</b></div><div><span>Outcome unavailable</span><b>${unavailable.toLocaleString()}</b></div></div><p class="coverage-note">${evaluable.toLocaleString()} evaluable forecast cells are the subset of currently-normal cells with held-out outcomes.</p>`;
   }
   const priorityEl = document.getElementById("workspaceTopPriority");
   if (priorityEl) {
@@ -2467,8 +2561,8 @@ function renderExecOverview() {
     const demand = state.cityTS.map(d => d.avg_demand_pressure);
     const rangeStart = Math.max(0, t - 23);
     Plotly.react("workspacePulseChart", [
-      { x: xs, y: ys, type: "scatter", mode: "lines", name: "QoE", fill: "tozeroy", fillcolor: "rgba(139,92,246,.12)", line: { color: "#8b5cf6", width: 2.5 }, hovertemplate: "QoE: <b>%{y:.1f}</b><extra></extra>" },
-      { x: xs, y: demand, type: "scatter", mode: "lines", name: "Demand", yaxis: "y2", line: { color: "#f59e0b", width: 1.5, dash: "dot" }, hovertemplate: "Demand: <b>%{y:.1f}</b><extra></extra>" }
+      { x: xs, y: ys, type: "scatter", mode: "lines", name: "QoE", fill: "tozeroy", fillcolor: "rgba(104,70,154,.10)", line: { color: "#68469a", width: 2.5 }, hovertemplate: "QoE: <b>%{y:.1f}</b><extra></extra>" },
+      { x: xs, y: demand, type: "scatter", mode: "lines", name: "Scenario Pressure", yaxis: "y2", line: { color: "#f59e0b", width: 1.5, dash: "dot" }, hovertemplate: "Scenario Pressure: <b>%{y:.1f}</b><extra></extra>" }
     ], { margin: { l: 52, r: 52, t: 14, b: 42 }, height: 250, dragmode: "pan", hovermode: "x unified", xaxis: { title: { text: "Selected scenario hour", font: { size: 11 } }, range: [xs[rangeStart], xs[t]], rangeslider: { visible: true, thickness: .14 }, tickformat: "%H:%M<br>%d %b", hoverformat: "%H:%M, %d %b %Y", nticks: 5, tickfont: { size: 10 }, showgrid: false }, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", yaxis: { title: { text: "QoE score", font: { size: 11 } }, tickfont: { size: 10 }, gridcolor: "#ece7f5" }, yaxis2: { title: { text: "Pressure", font: { size: 11 } }, tickfont: { size: 10 }, overlaying: "y", side: "right", showgrid: false }, showlegend: false }, { displayModeBar: false, responsive: true, scrollZoom: false });
     const pulsePlot = document.getElementById("workspacePulseChart");
     if (pulsePlot && !pulsePlot.dataset.syncBound) {
@@ -2492,7 +2586,95 @@ function renderExecOverview() {
   }
 }
 
+function setQuarterlyPriorityView(view) {
+  state.quarterlyPriorityView = view === "future" ? "future" : "current";
+  renderQuarterlyQueue();
+}
+
+function renderQuarterlyQueue() {
+  const rows = state.panel.h3_ids.map((h3, c) => ({
+    h3, c,
+    rank: onsetValue("onset_risk_rank", c),
+    status: onsetValue("current_status", c),
+    tier: onsetValue("onset_priority_tier", c),
+    dlPercentile: onsetValue("dl_percentile_in_quarter", c),
+    dl: onsetValue("ookla_dl_mbps", c),
+    ul: onsetValue("ookla_ul_mbps", c),
+    rtt: onsetValue("ookla_rtt_ms", c),
+    population: onsetValue("population_day", c),
+    support: onsetValue("measurement_support", c),
+    tests: onsetValue("ookla_tests", c),
+    driver: onsetValue("risk_driver_1_label", c)
+  }));
+  const issues = rows.filter(r => r.status === "currently_underperforming").sort((a, b) =>
+    (a.dlPercentile ?? Infinity) - (b.dlPercentile ?? Infinity) ||
+    (b.population ?? 0) - (a.population ?? 0)
+  );
+  const forecast = rows.filter(r => r.rank != null && ["high", "elevated"].includes(r.tier)).sort((a,b) => a.rank - b.rank);
+  const highCount = forecast.filter(r => r.tier === "high").length;
+  const elevatedCount = forecast.filter(r => r.tier === "elevated").length;
+  const view = state.quarterlyPriorityView === "current" ? "current" : "future";
+  const workflowLabel = h3 => state.tracking[h3] === "done" ? "Resolved" : state.tracking[h3] === "investigating" ? "Investigating" : "Active";
+  const fmt = (value, unit, decimals = 1) => value == null ? "Not available" : `${Number(value).toFixed(decimals)}${unit ? ` ${unit}` : ""}`;
+  const card = (r, observed) => {
+    const tier = observed ? "observed" : (r.tier || "lower");
+    const priority = observed ? "P1 · Observed issue · 2026Q1" : tier === "high" ? "P1 · High AI risk" : "P2 · Elevated AI risk";
+    const evidence = observed ? "Observed quarterly underperformance" : (r.driver || "Review the model contributors");
+    const why = observed
+      ? `Already underperforming in ${state.finals.metadata.predictor_quarter}${r.dlPercentile != null ? `; download is at the ${Number(r.dlPercentile).toFixed(1)} percentile` : ""}.`
+      : `${ONSET_TIER_LABELS[tier] ?? "Emerging risk"}, rank #${Math.round(r.rank)} among currently-normal evaluable forecast cells.`;
+    const next = observed
+      ? "Validate current download, upload and latency with recent local or operator measurements."
+      : `Review ${r.driver ? `the ${r.driver} contribution` : "the model contributors"} and quarterly measurement support before field investigation.`;
+    const tracking = state.tracking[r.h3] || "";
+    return `<article class="quarterly-queue-item queue-${tier}">
+      <div class="queue-item-head"><div><span class="quarterly-priority-badge">${priority}</span><h3>${cellName(r.h3)}</h3><p><b>${evidence}</b></p></div><button class="btn btn-sm btn-outline-primary" onclick="flyToCell('${r.h3}'); setInsightTab('${observed ? "overview" : "ai"}')">Inspect</button></div>
+      <div class="quarterly-measurements"><span><small>Download</small><b>${fmt(r.dl, "Mbps")}</b></span><span><small>Upload</small><b>${fmt(r.ul, "Mbps")}</b></span><span><small>Latency</small><b>${fmt(r.rtt, "ms")}</b></span></div>
+      <div class="queue-facts"><span><small>${observed ? "Evidence state" : "Top model contributor"}</small><b>${evidence}</b></span><span><small>Measurement support</small><b>${r.support ?? "Not reported"}${r.tests != null ? ` · ${Number(r.tests).toLocaleString()} tests` : ""}</b></span><span><small>Potential population context</small><b>${r.population != null ? Math.round(r.population).toLocaleString() : "Not available"}</b></span></div>
+      <p class="quarterly-why"><b>Why prioritised:</b> ${why}</p>
+      <p class="queue-next"><i class="bi bi-arrow-right-circle"></i><span><b>Recommended next check:</b> ${next}</span></p>
+      <div class="quarterly-workflow"><label><span>Workflow status</span><select onchange="setTracking('${r.h3}', this.value || null)"><option value="" ${tracking === "" ? "selected" : ""}>Active</option><option value="investigating" ${tracking === "investigating" ? "selected" : ""}>Investigating</option><option value="done" ${tracking === "done" ? "selected" : ""}>Resolved</option></select></label><small>${workflowLabel(r.h3)} · saved locally in this browser</small></div>
+    </article>`;
+  };
+  const switcher = `<div class="quarterly-view-toggle" role="group" aria-label="Choose investigation queue">
+    <button type="button" class="future ${view === "future" ? "active" : ""}" aria-pressed="${view === "future"}" onclick="setQuarterlyPriorityView('future')"><span>Future risk shortlist</span><b>${forecast.length.toLocaleString()}</b></button>
+    <button type="button" class="current ${view === "current" ? "active" : ""}" aria-pressed="${view === "current"}" onclick="setQuarterlyPriorityView('current')"><span>Observed issues · 2026Q1</span><b>${issues.length.toLocaleString()}</b></button>
+  </div>`;
+  const currentQueue = `<div class="queue-section-heading current"><span>OBSERVED ISSUES · 2026Q1</span><b>Validate existing underperformance first</b></div>
+    <p class="panel-hint">Ordered by lowest quarterly download percentile, then population context. These cells are not forecast-ranked.</p>
+    ${issues.slice(0,5).map(r => card(r,true)).join("")}
+    <details class="quarterly-more"><summary>More current issues (next 15)</summary>${issues.slice(5,20).map(r => card(r,true)).join("")}</details>`;
+  const futureQueue = `<div class="queue-section-heading future"><span>FUTURE RISK SHORTLIST</span><b>${highCount.toLocaleString()} High · ${elevatedCount.toLocaleString()} Elevated</b></div>
+    <p class="panel-hint">Only High and Elevated AI bands are included here. Use Anticipate to explore the complete ${rows.filter(r => r.rank != null).length.toLocaleString()}-cell forecast ranking.</p>
+    ${forecast.slice(0,5).map(r => card(r,false)).join("")}
+    <details class="quarterly-more"><summary>More future priorities (ranks 6–20)</summary>${forecast.slice(5,20).map(r => card(r,false)).join("")}</details>`;
+  document.getElementById("quarterlyPriorityList").innerHTML = state.finals
+    ? `${switcher}${view === "current" ? currentQueue : futureQueue}`
+    : `<p>Quarterly forecast data is unavailable.</p>`;
+}
+
 function setWorkspaceTool(tool) {
+  const labTools = new Set(["lab", "pulse", "compare", "hotspots", "spatial", "timeseries", "whatif", "rootcause", "actions", "comparison"]);
+  const inLab = labTools.has(tool) || (tool === "cell" && document.body.classList.contains("in-scenario-lab"));
+  document.body.classList.toggle("in-scenario-lab", inLab);
+  document.querySelectorAll(".scenario-back-link").forEach(el => el.remove());
+  if (!inLab) {
+    if (state.playing) document.getElementById("playBtn").click();
+    if (state.whatIfEnabled) document.getElementById("whatIfEnabled").click();
+    if (state.weatherEnabled) document.getElementById("toggleWeather").click();
+    state.analysisContext = "quarterly";
+  }
+  if (tool === "explain") {
+    if (!state.selectedH3) {
+      const first = state.panel.h3_ids.find((h3, c) => onsetValue("onset_risk_rank", c) === 1);
+      if (first) flyToCell(first);
+    }
+    state.insightTab = "ai";
+    renderSelectedAreaInsights();
+  }
+  if (tool === "prioritise") renderQuarterlyQueue();
+  if (tool === "pulse") document.getElementById("hourlyPulsePanel").appendChild(document.querySelector(".workspace-hourly-secondary"));
+
   state.workspaceTool = tool;
   if (tool !== "more") document.getElementById("moreToolsPopover")?.classList.add("d-none");
   document.querySelectorAll(".workspace-tool").forEach(btn => btn.classList.toggle("active", tool === "cell" ? btn.dataset.workspaceTool === "overview" : btn.dataset.workspaceTool === tool));
@@ -2501,6 +2683,10 @@ function setWorkspaceTool(tool) {
   const workspacePanels = document.querySelectorAll(".workspace-analysis-panel");
   workspacePanels.forEach(panel => panel.style.setProperty("display", "none", "important"));
   const panelByTool = {
+    lab: "scenarioLabPanel",
+    pulse: "hourlyPulsePanel",
+    explain: "selectedAreaPanel",
+    prioritise: "quarterlyPriorityPanel",
     overview: "workspaceOverviewPanel",
     cell: "selectedAreaPanel",
     compare: "comparePanel",
@@ -2521,6 +2707,14 @@ function setWorkspaceTool(tool) {
   const analysisStage = document.getElementById("analysisStage");
   if (activePanel && analysisStage && activePanel.parentElement !== analysisStage) analysisStage.appendChild(activePanel);
   activePanel?.style.setProperty("display", "block", "important");
+  if (analysisStage) analysisStage.scrollTop = 0;
+  if (inLab && tool !== "lab" && activePanel) {
+    const back = document.createElement("button");
+    back.className = "scenario-back-link btn btn-sm btn-outline-secondary";
+    back.textContent = "← Scenario Lab";
+    back.onclick = () => setWorkspaceTool("lab");
+    activePanel.prepend(back);
+  }
   const compare = tool === "compare";
   state.compareMode = compare;
   const compareBtn = document.getElementById("compareToggleBtn");
@@ -2531,8 +2725,8 @@ function setWorkspaceTool(tool) {
   }
   document.getElementById("comparePanel")?.classList.toggle("d-none", !compare);
   if (compare) renderComparePanel();
-  const quarterlyTools = new Set(["overview", "ai"]);
-  const scenarioTools = new Set(["hotspots", "spatial", "rootcause", "actions", "timeseries", "whatif"]);
+  const quarterlyTools = new Set(["overview", "ai", "explain", "prioritise"]);
+  const scenarioTools = new Set(["lab", "pulse", "compare", "comparison", "hotspots", "spatial", "rootcause", "actions", "timeseries", "whatif"]);
   if (quarterlyTools.has(tool)) state.analysisContext = "quarterly";
   if (scenarioTools.has(tool)) state.analysisContext = "scenario";
   document.body.classList.toggle("quarterly-context", state.analysisContext === "quarterly");
@@ -2543,11 +2737,17 @@ function setWorkspaceTool(tool) {
   if (timelineHint) timelineHint.textContent = state.analysisContext === "quarterly" ? "Demo only · does not change quarterly forecast" : "Active · controls hourly scenario views";
   syncMapSelectedBar();
   syncMapWorkspaceInsight();
-  if (tool === "overview") setMapLens("onset");
+  if (!inLab || tool === "overview") setMapLens("onset");
+  if (["lab", "pulse", "compare"].includes(tool)) setMapLens("qoe");
+  document.querySelector('[data-workspace-tool="lab"]')?.classList.toggle("active", inLab);
   if (tool === "hotspots" || tool === "spatial") setMapLens("hotspot");
   if (["rootcause", "actions", "timeseries", "whatif"].includes(tool)) setMapLens("qoe");
   if (tool === "ai" || tool === "comparison") setMapLens("onset");
   if (tool === "ai") renderAiPanel();
+  document.querySelectorAll(".workspace-tool").forEach(btn => {
+    if (btn.classList.contains("active")) btn.setAttribute("aria-current", "page");
+    else btn.removeAttribute("aria-current");
+  });
   const whatIfBox = document.querySelector(".whatif-box");
   if (whatIfBox && !state.whatIfParent) state.whatIfParent = whatIfBox.parentElement;
   if (tool === "whatif") {
@@ -2561,6 +2761,7 @@ function setWorkspaceTool(tool) {
   window.setTimeout(() => {
     state.map?.invalidateSize();
     activePanel?.querySelectorAll(".js-plotly-plot").forEach(plot => window.Plotly?.Plots.resize(plot));
+    syncOperatorChartTheme();
   }, 80);
 }
 
@@ -2636,7 +2837,7 @@ function initWorkspaceResize() {
   const applyRatio = clientX => {
     if (window.innerWidth <= 760) return;
     const rect = workspace.getBoundingClientRect();
-    const railWidth = window.innerWidth <= 1100 ? 64 : 76;
+    const railWidth = document.querySelector(".workspace-tool-rail").getBoundingClientRect().width;
     const usableWidth = rect.width - railWidth;
     const ratio = Math.min(.58, Math.max(.38, (clientX - rect.left - railWidth) / usableWidth));
     workspace.style.setProperty("--analysis-ratio", ratio.toFixed(4));
@@ -2668,7 +2869,7 @@ function initWorkspaceResize() {
     const current = Number.parseFloat(getComputedStyle(workspace).getPropertyValue("--analysis-ratio")) || .47;
     const target = event.key === "Home" ? .38 : event.key === "End" ? .58 : current + (event.key === "ArrowRight" ? .02 : -.02);
     const rect = workspace.getBoundingClientRect();
-    const railWidth = window.innerWidth <= 1100 ? 64 : 76;
+    const railWidth = document.querySelector(".workspace-tool-rail").getBoundingClientRect().width;
     applyRatio(rect.left + railWidth + (rect.width - railWidth) * target);
   });
 }
@@ -2700,18 +2901,37 @@ function setAnalystTab(tab) {
 function syncPrimaryMapControls() {
   const control = document.querySelector(".map-primary-controls");
   if (control) control.dataset.activeLens = state.colorBy;
-  document.querySelectorAll(".map-mode-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.mapMode === state.colorBy));
+  document.querySelectorAll(".map-mode-btn").forEach(btn => {
+    const selected = btn.dataset.mapMode === state.colorBy;
+    btn.classList.toggle("active", selected);
+    btn.setAttribute("aria-pressed", String(selected));
+  });
+  document.querySelectorAll(".quarterly-map-view-btn").forEach(btn => {
+    const selected = btn.dataset.quarterlyView === state.quarterlyMapView;
+    btn.classList.toggle("active", selected);
+    btn.setAttribute("aria-pressed", String(selected));
+  });
+  document.getElementById("quarterlyMapViews")?.classList.toggle("d-none", state.colorBy !== "onset");
   const lensHud = document.getElementById("mapLensHud");
-  if (lensHud) lensHud.textContent = ({ qoe: "QoE", demand: "Demand", hotspot: "Hotspots", onset: state.finals ? "Quarterly AI risk" : "AI risk", moran: "Moran's I", risk: "Historical outcome", static_ai: "AI static DL", comparison: "AI comparison" })[state.colorBy] || "Map layer";
+  if (lensHud) lensHud.textContent = state.colorBy === "onset" ? ({ observed: "Observed Q1", forecast: "Forecast Q2", combined: "Observed Q1 + Forecast Q2" }[state.quarterlyMapView]) : ({ qoe: "QoE", demand: "Scenario Pressure", hotspot: "Hotspots", moran: "Moran's I", risk: "Historical outcome", static_ai: "AI static DL", comparison: "AI comparison" })[state.colorBy] || "Map layer";
   const contextBadge = document.getElementById("mapDataContextBadge");
   if (contextBadge) {
     const quarterly = state.colorBy === "onset";
-    contextBadge.textContent = quarterly ? (state.finalsActualRevealed ? "Actual outcome · quarterly" : "Observed + AI · quarterly") : "Demo / Scenario · hourly";
+    contextBadge.textContent = quarterly ? (state.finalsActualRevealed && state.quarterlyMapView === "combined" ? "Held-out outcome · quarterly" : ({ observed: "Observed status · 2026Q1", forecast: "AI forecast · 2026Q2", combined: "Observed 2026Q1 + forecast 2026Q2" }[state.quarterlyMapView])) : "Demo / Scenario · hourly";
     contextBadge.classList.toggle("ai", quarterly);
     contextBadge.classList.toggle("sim", !quarterly);
   }
   const mapHud = document.querySelector(".map-workspace-hud");
-  if (mapHud) mapHud.dataset.context = state.colorBy === "onset" ? (state.finalsActualRevealed ? "Actual outcome · quarterly" : "Observed + AI · quarterly") : "Scenario playback · hourly";
+  if (mapHud) mapHud.dataset.context = state.colorBy === "onset" ? ({ observed: "Observed status · 2026Q1", forecast: "AI forecast · 2026Q2", combined: state.finalsActualRevealed ? "Held-out outcome · quarterly" : "Observed 2026Q1 + forecast 2026Q2" }[state.quarterlyMapView]) : "Scenario playback · hourly";
+}
+
+function setQuarterlyMapView(view) {
+  state.quarterlyMapView = ["observed", "forecast", "combined"].includes(view) ? view : "combined";
+  state.colorBy = "onset";
+  document.getElementById("colorBySelect").value = "onset";
+  syncPrimaryMapControls();
+  renderMapColors();
+  renderLegend();
 }
 
 function renderPriorityActionCentre() {
@@ -2733,11 +2953,11 @@ function renderPriorityActionCentre() {
     return `<article class="priority-action-item priority-${severity.toLowerCase()}">
       <div class="priority-kicker">${severity} priority</div>
       <h3>${cellName(cand.h3)}</h3>
-      <div class="priority-metrics"><span>Scenario QoE <b>${cand.qoe?.toFixed(0) ?? "-"}</b></span><span>Scenario demand <b>${cand.demand?.toFixed(0) ?? "-"}</b></span>${aiRank != null ? `<span class="ai-text">Quarterly AI rank <b>#${Math.round(aiRank)}</b></span>` : ""}</div>
-      <p><b>Why flagged:</b> ${cand.cls === 2 ? "Severe service degradation" : "Degraded service quality"} with priority score from the existing intervention queue.</p>
+      <div class="priority-metrics"><span>Scenario QoE <b>${cand.qoe?.toFixed(0) ?? "-"}</b></span><span>Scenario pressure <b>${cand.demand?.toFixed(0) ?? "-"}</b></span>${aiRank != null ? `<span class="ai-text">Quarterly AI rank <b>#${Math.round(aiRank)}</b></span>` : ""}</div>
+      <p><b>Why flagged:</b> ${cand.cls === 2 ? "Severe service degradation" : "Degraded service quality"} with priority score from the existing investigation queue.</p>
       <p><b>Primary investigation hypothesis:</b> <span class="cheat-badge heuristic">DEMO / SCENARIO</span> ${CAUSE_LABELS[cause]}</p>
       ${signals.length > 1 ? `<p><b>Supporting signals:</b> ${signals.slice(1).map(key => CAUSE_LABELS[key]).join(" · ")}</p>` : ""}
-      <p><b>Scenario measurement support:</b> ${support.label}</p>
+      <p><b>Scenario evidence coverage:</b> ${support.label}</p>
       <p><b>Investigation option:</b> ${ACTIONS[cause]}</p>
       <button class="btn btn-sm btn-outline-primary" onclick="flyToCell('${cand.h3}')">View on map</button>
     </article>`;
@@ -2770,6 +2990,7 @@ function renderSelectedAreaInsights() {
   const quarterlyDl = onsetValue("ookla_dl_mbps", c);
   const quarterlyUl = onsetValue("ookla_ul_mbps", c);
   const quarterlyRtt = onsetValue("ookla_rtt_ms", c);
+  const heldOutResult = onsetValue("time_machine_result", c);
   const status = cellValue("degradation_class", t, c);
   const statusLabel = ["Normal", "Degraded", "Severe"][status] || "Unknown";
   const explanation = explainCell(c);
@@ -2833,30 +3054,36 @@ function renderSelectedAreaInsights() {
       </svg></div><div class="cell-pulse-hover" role="status" aria-live="polite"></div><div class="cell-pulse-x-label">Scenario time</div><div class="cell-pulse-time"><span>Drag to explore ${qoeHistory.length} hours</span><span>Latest · ${last.toFixed(1)}</span></div></div>
     </div>`;
   })() : "";
-  const statusLine = `<div class="cell-intel-identity cell-intel-context"><div><h3>${cellName(h3)}</h3><span class="cell-current-issue ${quarterlyStatus === "currently_underperforming" ? "is-issue" : "is-normal"}"><i></i>${quarterlyStatus === "currently_underperforming" ? "Current issue · Underperforming" : quarterlyStatusLabel}</span></div><button class="cell-clear-link" onclick="clearSelectedArea()">Clear</button></div>`;
+  const statusLine = `<div class="cell-intel-identity cell-intel-context"><div><h3>${cellName(h3)}</h3><span class="cell-current-issue ${quarterlyStatus === "currently_underperforming" ? "is-issue" : "is-normal"}"><i></i>${quarterlyStatus === "currently_underperforming" ? "Observed issue · 2026Q1" : `${quarterlyStatusLabel} · 2026Q1`}</span></div><button class="cell-clear-link" onclick="clearSelectedArea()">Clear</button></div>`;
   document.querySelectorAll(".insight-tab[data-insight-tab]").forEach(btn => btn.classList.toggle("active", btn.dataset.insightTab === state.insightTab));
 
   let content = "";
   if (state.insightTab === "ai") {
     const signals = explanation?.signals || [];
     const finalsDrivers = state.finals ? [1, 2, 3].map(n => ({ label: onsetValue(`risk_driver_${n}_label`, c), value: onsetValue(`risk_driver_${n}_value`, c), family: onsetValue(`risk_driver_${n}_family`, c) })).filter(row => row.label != null) : [];
+    const finalsProtective = state.finals ? [1, 2].map(n => ({ label: onsetValue(`protective_${n}_label`, c), value: onsetValue(`protective_${n}_value`, c), family: onsetValue(`protective_${n}_family`, c) })).filter(row => row.label != null) : [];
     const signalRow = signal => `<li><i class="bi ${signal.word?.toLowerCase().includes("high") || signal.word?.toLowerCase().includes("elevated") ? "bi-exclamation-triangle" : "bi-arrow-left-right"}"></i><span>${signal.label}</span><b>${signal.value.toFixed(1)}${signal.unit} <em>${signal.word}</em></b></li>`;
-    const finalsSignalRow = row => `<li><i class="bi bi-stars"></i><span>${row.label}</span><b>${row.value ?? "—"}<em>${row.family ?? "Model contributor"}</em></b></li>`;
+    const finalsSignalRow = row => `<li class="model-signal-card risk-raising"><i class="bi bi-stars"></i><span><b>${row.label}</b><small>Observed value</small><em>${formatModelObservedValue(row.label, row.value)}</em></span><strong><small>Model effect</small><b>↑ higher risk</b></strong></li>`;
+    const finalsProtectiveRow = row => `<li class="model-signal-card risk-lowering"><i class="bi bi-shield-check"></i><span><b>${row.label}</b><small>Observed value</small><em>${formatModelObservedValue(row.label, row.value)}</em></span><strong><small>Model effect</small><b>↓ lower risk</b></strong></li>`;
     const signalRows = state.finals ? finalsDrivers.map(finalsSignalRow).join("") : signals.slice(0, 3).map(signalRow).join("");
     const remainingSignalRows = signals.slice(3).map(signalRow).join("");
     const qoeEvidence = state.finals || qoeDelta == null ? "" : `<li><i class="bi ${qoeDelta >= 0 ? "bi-arrow-up" : "bi-arrow-down"}"></i><span>Recent QoE change</span><b>${qoeDelta >= 0 ? "+" : ""}${qoeDelta.toFixed(1)} <em>${qoeDelta >= 0 ? "Improving" : "Degrading"}</em></b></li>`;
-    const quarterlyContext = state.finals ? [dataRow("Human-activity proxy (VIIRS)", onsetValue("viirs_rad_quarter", c), "Context proxy; not measured network demand"), dataRow("Population density", onsetValue("population_density", c)), dataRow("Built-up ratio", onsetValue("built_up_ratio", c)), dataRow("Tower density", onsetValue("tower_density", c))].join("") : "";
-    content = `<section class="cell-intel-section ai-insight"><div class="cell-section-heading"><div><div class="cell-title-row"><span class="cell-intel-kicker">EXPLAIN</span><span class="cheat-badge ai">QUARTERLY AI</span></div><h4>Why the model flagged this cell</h4></div></div><div class="cell-ai-hero">${aiRank != null ? `<strong>#${Math.round(aiRank)}</strong>` : "<strong>—</strong>"}<span>${ONSET_TIER_LABELS[aiTier] ?? aiTier ?? "Not scored"}</span><small>Relative prioritisation ranking</small></div>
-      <p class="cell-intel-lead">${state.finals ? (aiRank != null ? `Ranked <b>#${Math.round(aiRank)}</b> for emerging underperformance risk in ${state.finals.metadata.forecast_quarter}.` : quarterlyStatus === "currently_underperforming" ? `Already underperforming in ${state.finals.metadata.predictor_quarter}; treat this as an observed issue, not a new AI forecast.` : "Outside the finals forecast-eligible population.") : (aiStatus === "currently_degraded" ? "This cell is currently degraded in the scored snapshot." : aiRank != null ? `Priority tier: <b>${ONSET_TIER_LABELS[aiTier] ?? aiTier ?? "for review"}</b>. The model orders this cell among the scored areas.` : "This cell was not scored by the available forecast snapshot.")}</p>
-      <div class="cell-intel-note"><i class="bi bi-info-circle"></i>${state.finals ? "SHAP factors are contributors to the model's risk assessment, not verified engineering explanations. Risk rank is not an individual probability." : "AI values are a relative rank for prioritisation, not a probability of failure."}</div>
-      ${signalRows || qoeEvidence ? `<h5>Risk-assessment contributors</h5><ul class="cell-evidence-list">${signalRows}${qoeEvidence}</ul>${remainingSignalRows ? `<details class="cell-detail-disclosure"><summary>All available model signals</summary><ul class="cell-evidence-list">${remainingSignalRows}</ul></details>` : ""}` : `<p class="text-summary">No cell-level forecast evidence is available for this selected cell.</p>`}
+    const quarterlyContext = state.finals ? [dataRow("Human-activity proxy (VIIRS)", formatModelObservedValue("Human-activity proxy (VIIRS)", onsetValue("viirs_rad_quarter", c)), "Context proxy; not measured network demand"), dataRow("Population density", onsetValue("population_density_per_km2", c) != null ? `${Number(onsetValue("population_density_per_km2", c)).toLocaleString(undefined, { maximumFractionDigits: 1 })} people/km²` : null), dataRow("Built-up ratio", formatModelObservedValue("Built-up ratio", onsetValue("built_up_ratio", c))), dataRow("Tower density", onsetValue("tower_density_per_km2", c) != null ? `${Number(onsetValue("tower_density_per_km2", c)).toFixed(2)} sites/km²` : null)].join("") : "";
+    const explainContext = state.finals
+      ? aiRank != null
+        ? `<div class="cell-explain-context risk-${aiTier ?? "unscored"}"><span><i class="bi bi-circle-fill"></i>${quarterlyStatusLabel} · ${state.finals.metadata.predictor_quarter}</span><b>${ONSET_TIER_LABELS[aiTier] ?? aiTier} · rank #${Math.round(aiRank)}</b></div>`
+        : `<div class="cell-explain-context ${quarterlyStatus === "currently_underperforming" ? "is-observed-issue" : "is-unscored"}"><span><i class="bi bi-circle-fill"></i>${quarterlyStatusLabel} · ${state.finals.metadata.predictor_quarter}</span><b>${quarterlyStatus === "currently_underperforming" ? "Observed issue · not forecast-eligible" : "No quarterly AI ranking"}</b></div>`
+      : `<div class="cell-explain-context risk-${aiTier ?? "unscored"}"><span>${aiStatus?.replaceAll("_", " ") ?? "Forecast context"}</span><b>${aiRank != null ? `${ONSET_TIER_LABELS[aiTier] ?? aiTier} · rank #${Math.round(aiRank)}` : "Not scored"}</b></div>`;
+    content = `<section class="cell-intel-section ai-insight"><div class="cell-section-heading"><div><div class="cell-title-row"><span class="cell-intel-kicker">EXPLAIN</span><span class="cheat-badge ai">QUARTERLY AI</span></div><h4>Why the model flagged this cell</h4></div></div>${explainContext}${state.finalsActualRevealed && heldOutResult ? `<div class="cell-validation-result compact"><span>Held-out ${state.finals.metadata.forecast_quarter} result</span><b>${timeMachineLabel(heldOutResult)}</b></div>` : ""}
+      <div class="cell-intel-note"><i class="bi bi-info-circle"></i>${state.finals ? "These factors are contributors to the model's risk assessment. They influenced its ranking and do not establish engineering cause. Risk rank is not an individual probability." : "AI values are a relative rank for prioritisation, not a probability of failure."}</div>
+      ${signalRows || qoeEvidence ? `<h5>Risk-assessment contributors</h5><ul class="cell-evidence-list">${signalRows}${qoeEvidence}</ul>${finalsProtective.length ? `<h5>Protective contributors</h5><ul class="cell-evidence-list protective">${finalsProtective.map(finalsProtectiveRow).join("")}</ul>` : ""}${remainingSignalRows ? `<details class="cell-detail-disclosure"><summary>All available model signals</summary><ul class="cell-evidence-list">${remainingSignalRows}</ul></details>` : ""}` : `<p class="text-summary">No cell-level forecast evidence is available for this selected cell.</p>`}
       ${quarterlyContext ? `<details class="cell-detail-disclosure"><summary>Geographic and activity context</summary><div class="cell-data-group">${quarterlyContext}</div></details>` : ""}
       ${!state.finals && aiScore != null ? `<details><summary>Model scoring detail</summary><p>Relative score: <b>${aiScore.toFixed(2)}</b>. Snapshot: ${state.onset?.snapshot_timestamp ?? "—"} UTC. The score should be used to order investigation, not as a calibrated likelihood.</p></details>` : ""}
-      <div class="cell-intel-flow"><span>Model assessment</span><i class="bi bi-arrow-right"></i><button class="btn btn-sm btn-outline-primary" onclick="setInsightTab('cause')">Review investigation evidence</button></div><button class="cell-secondary-link" onclick="setWorkspaceTool('ai')">Open full quarterly forecast</button></section>`;
+      <div class="cell-intel-flow"><span>View full model explanation</span><i class="bi bi-arrow-right"></i><button class="btn btn-sm btn-outline-primary" onclick="setInsightTab('overview')">Review quarterly measurements</button></div><button class="cell-secondary-link" onclick="setWorkspaceTool('ai')">Open full quarterly forecast</button></section>`;
   } else if (state.insightTab === "cause") {
     const causeEvidenceItems = [
       evidence("QoE", metrics.qoe != null ? `${metrics.qoe.toFixed(1)} / 100` : null, metricTone("qoe", metrics.qoe)),
-      evidence("Demand pressure", metrics.demand != null ? `${metrics.demand.toFixed(1)} · ${demandLabel}` : null, metricTone("demand", metrics.demand)),
+      evidence("Scenario Pressure", metrics.demand != null ? `${metrics.demand.toFixed(1)} · ${demandLabel}` : null, metricTone("demand", metrics.demand)),
       evidence("RTT", metrics.rtt != null ? `${metrics.rtt.toFixed(1)} ms` : null, metricTone("latency", metrics.rtt)),
       evidence("Jitter", metrics.jitter != null ? `${metrics.jitter.toFixed(1)} ms` : null, metricTone("jitter", metrics.jitter)),
       evidence("Packet loss", metrics.loss != null ? `${metrics.loss.toFixed(2)}%` : null, metricTone("loss", metrics.loss)),
@@ -2866,18 +3093,18 @@ function renderSelectedAreaInsights() {
     const causeEvidence = causeEvidenceItems.slice(0, 4).join("");
     const remainingCauseEvidence = causeEvidenceItems.slice(4).join("");
     const supportingSignals = cellSignals.slice(1).map(key => `<span>${CAUSE_LABELS[key]} · ${(investigationScores[key] * 100).toFixed(0)}th percentile</span>`).join("");
-    content = `<section class="cell-intel-section cause-insight"><div class="cell-title-row"><span class="cell-intel-kicker">EXPLAIN</span><span class="cheat-badge heuristic">DEMO / SCENARIO</span></div><h4>Primary investigation hypothesis: ${CAUSE_LABELS[cause]}</h4><p class="cell-intel-lead">${explanation?.likelyTrigger ?? "No investigation signal reaches the citywide top quartile for this scenario hour."}</p>${supportingSignals ? `<div class="cell-alternative-drivers"><b>Supporting signals</b>${supportingSignals}</div>` : ""}<div class="cell-measurement-support"><span>Scenario measurement support</span><b>${cellSupport.label}</b><small>${cellValue("confidence", t, c) != null ? `${(cellValue("confidence", t, c) * 100).toFixed(0)}% confidence` : "Unavailable"} · separate from investigation signals</small></div><h5>Scenario measurements</h5><ul class="cell-evidence-list">${causeEvidence || "<li>No supporting measurements are available for this hour.</li>"}</ul>${remainingCauseEvidence ? `<details class="cell-detail-disclosure"><summary>Additional scenario measurements</summary><ul class="cell-evidence-list">${remainingCauseEvidence}</ul></details>` : ""}<div class="cell-intel-note"><i class="bi bi-search"></i> Signals mark the citywide top quartile for this scenario hour. They are relative investigation thresholds, not engineering failure thresholds. Cells may show multiple supporting signals.</div><div class="cell-intel-flow"><span>Evidence suggests checks</span><i class="bi bi-arrow-right"></i><button class="btn btn-sm btn-outline-primary" onclick="setInsightTab('action')">Set investigation priority</button></div><button class="cell-secondary-link" onclick="setWorkspaceTool('rootcause')">Open investigation evidence</button></section>`;
+    content = `<section class="cell-intel-section cause-insight"><div class="cell-title-row"><span class="cell-intel-kicker">EXPLAIN</span><span class="cheat-badge heuristic">DEMO / SCENARIO</span></div><h4>Primary investigation hypothesis: ${CAUSE_LABELS[cause]}</h4><p class="cell-intel-lead">${explanation?.likelyTrigger ?? "No investigation signal reaches the citywide top quartile for this scenario hour."}</p>${supportingSignals ? `<div class="cell-alternative-drivers"><b>Supporting signals</b>${supportingSignals}</div>` : ""}<div class="cell-measurement-support"><span>Scenario evidence coverage</span><b>${cellSupport.label}</b><small>${cellValue("confidence", t, c) != null ? `${(cellValue("confidence", t, c) * 100).toFixed(0)}% confidence` : "Unavailable"} · separate from investigation signals</small></div><h5>Scenario measurements</h5><ul class="cell-evidence-list">${causeEvidence || "<li>No supporting measurements are available for this hour.</li>"}</ul>${remainingCauseEvidence ? `<details class="cell-detail-disclosure"><summary>Additional scenario measurements</summary><ul class="cell-evidence-list">${remainingCauseEvidence}</ul></details>` : ""}<div class="cell-intel-note"><i class="bi bi-search"></i> Signals mark the citywide top quartile for this scenario hour. They are relative investigation thresholds, not engineering failure thresholds. Cells may show multiple supporting signals.</div><div class="cell-intel-flow"><span>Evidence suggests checks</span><i class="bi bi-arrow-right"></i><button class="btn btn-sm btn-outline-primary" onclick="setInsightTab('action')">Set investigation priority</button></div><button class="cell-secondary-link" onclick="setWorkspaceTool('rootcause')">Open investigation evidence</button></section>`;
   } else if (state.insightTab === "action") {
     const actionStatus = state.tracking[h3] || "";
     const investigationPriority = quarterlyStatus === "currently_underperforming" ? "Investigate observed current issue" : aiRank != null && aiRank <= (state.finals.metadata.risk_thresholds?.elevated_max_rank ?? 200) ? `Prioritise next-quarter review · rank #${Math.round(aiRank)}` : "Monitor through routine review";
     content = `<section class="cell-intel-section action-insight"><span class="cell-intel-kicker">PRIORITISE</span><h4>${investigationPriority}</h4><div class="cell-action-context"><span>Quarterly basis</span><b>${quarterlyStatusLabel}${aiRank != null ? ` · ${ONSET_TIER_LABELS[aiTier]} #${Math.round(aiRank)}` : ""}</b><small>Observed status and emerging-risk rank determine where to investigate first.</small></div><details class="cell-detail-disclosure"><summary>Demo / Scenario investigation option</summary><p>${ACTIONS[cause] ?? "Review this cell with network operations."}</p><p>Hourly scenario: QoE ${metrics.qoe?.toFixed(1) ?? "—"} · pressure ${demandLabel} · RTT ${metrics.rtt?.toFixed(0) ?? "—"} ms.</p></details><div class="cell-action-timeline" aria-label="Action status"><span class="${!actionStatus ? "current" : ""}">Open</span><span class="${actionStatus === "investigating" ? "current" : ""}">Investigating</span><span class="${actionStatus === "planned" ? "current" : ""}">Planned</span><span class="${actionStatus === "done" ? "current" : ""}">Resolved</span></div><label class="cell-status-control"><span>Status</span><select onchange="setTracking('${h3}', this.value || null)"><option value="">Not set</option><option value="planned" ${actionStatus === "planned" ? "selected" : ""}>Planned</option><option value="investigating" ${actionStatus === "investigating" ? "selected" : ""}>Investigating</option><option value="done" ${actionStatus === "done" ? "selected" : ""}>Resolved</option></select></label><div class="cell-intel-note"><i class="bi bi-person-workspace"></i> Validate contributors and measurements before selecting an engineering response. Tracking is saved locally in this browser.</div></section>`;
   } else if (state.insightTab === "data") {
-    const finalsForecastRows = state.finals ? [dataRow("Observed current status", quarterlyStatusLabel), dataRow("Quarterly AI rank", aiRank != null ? `#${Math.round(aiRank)}` : "Not forecast-eligible"), dataRow("Risk band", aiRank != null ? (ONSET_TIER_LABELS[aiTier] ?? aiTier) : null), dataRow("Measurement support", onsetValue("measurement_support", c)), dataRow("Ookla tests", onsetValue("ookla_tests", c)), dataRow("Download", quarterlyDl != null ? `${quarterlyDl.toFixed(2)} Mbps` : null), dataRow("Upload", quarterlyUl != null ? `${quarterlyUl.toFixed(2)} Mbps` : null), dataRow("Latency", quarterlyRtt != null ? `${quarterlyRtt.toFixed(2)} ms` : null), dataRow("Download percentile", onsetValue("dl_percentile_in_quarter", c) != null ? `${onsetValue("dl_percentile_in_quarter", c).toFixed(1)}` : null), state.finalsActualRevealed ? dataRow("Actual outcome", timeMachineLabel(onsetValue("time_machine_result", c))) : ""].join("") : `${dataRow("AI rank", aiRank != null ? `#${Math.round(aiRank)}` : null)}${dataRow("Priority tier", aiTier ? (ONSET_TIER_LABELS[aiTier] ?? aiTier) : null)}${dataRow("Operational status", aiStatus ? aiStatus.replaceAll("_", " ") : null)}`;
+    const finalsForecastRows = state.finals ? [dataRow("Observed current status", quarterlyStatusLabel), dataRow("Quarterly AI rank", aiRank != null ? `#${Math.round(aiRank)}` : "Not forecast-eligible"), dataRow("Risk band", aiRank != null ? (ONSET_TIER_LABELS[aiTier] ?? aiTier) : null), dataRow("Quarterly measurement support", onsetValue("measurement_support", c)), dataRow("Ookla tests", onsetValue("ookla_tests", c)), dataRow("Download", quarterlyDl != null ? `${quarterlyDl.toFixed(1)} Mbps` : null), dataRow("Upload", quarterlyUl != null ? `${quarterlyUl.toFixed(1)} Mbps` : null), dataRow("Latency", quarterlyRtt != null ? `${quarterlyRtt.toFixed(1)} ms` : null), dataRow("Download percentile", onsetValue("dl_percentile_in_quarter", c) != null ? `${onsetValue("dl_percentile_in_quarter", c).toFixed(1)}` : null), state.finalsActualRevealed ? dataRow("Actual outcome", timeMachineLabel(onsetValue("time_machine_result", c))) : ""].join("") : `${dataRow("AI rank", aiRank != null ? `#${Math.round(aiRank)}` : null)}${dataRow("Priority tier", aiTier ? (ONSET_TIER_LABELS[aiTier] ?? aiTier) : null)}${dataRow("Operational status", aiStatus ? aiStatus.replaceAll("_", " ") : null)}`;
     content = `<section class="cell-intel-section cell-data-section"><h4>Technical details</h4><p class="cell-intel-lead">Quarterly real and hourly scenario data remain explicitly separated.</p><div class="cell-data-group"><h5>Hourly service condition <span class="cheat-badge sim">DEMO / SCENARIO</span></h5>${[
-      dataRow("QoE", metrics.qoe != null ? `${metrics.qoe.toFixed(1)} / 100` : null), dataRow("Download", metrics.dl != null ? `${metrics.dl.toFixed(2)} Mbps` : null), dataRow("Upload", metrics.ul != null ? `${metrics.ul.toFixed(2)} Mbps` : null), dataRow("RTT", metrics.rtt != null ? `${metrics.rtt.toFixed(2)} ms` : null), dataRow("Jitter", metrics.jitter != null ? `${metrics.jitter.toFixed(2)} ms` : null), dataRow("Packet loss", metrics.loss != null ? `${metrics.loss.toFixed(3)}%` : null), dataRow("Demand pressure", metrics.demand != null ? metrics.demand.toFixed(2) : null), dataRow("Confidence", cellValue("confidence", t, c) != null ? `${(cellValue("confidence", t, c) * 100).toFixed(0)}%` : null)
+      dataRow("QoE", metrics.qoe != null ? `${metrics.qoe.toFixed(1)} / 100` : null), dataRow("Download", metrics.dl != null ? `${metrics.dl.toFixed(1)} Mbps` : null), dataRow("Upload", metrics.ul != null ? `${metrics.ul.toFixed(1)} Mbps` : null), dataRow("RTT", metrics.rtt != null ? `${metrics.rtt.toFixed(1)} ms` : null), dataRow("Jitter", metrics.jitter != null ? `${metrics.jitter.toFixed(1)} ms` : null), dataRow("Packet loss", metrics.loss != null ? `${metrics.loss.toFixed(2)}%` : null), dataRow("Scenario Pressure", metrics.demand != null ? metrics.demand.toFixed(1) : null), dataRow("Scenario evidence coverage", cellValue("confidence", t, c) != null ? `${(cellValue("confidence", t, c) * 100).toFixed(0)}%` : null)
     ].join("") || "<p class='text-summary'>No hourly values available.</p>"}</div><div class="cell-data-group"><h5>Static GIS context <span class="cheat-badge real">REAL STATIC GIS</span></h5>${[
       dataRow("Population (day)", props.population_day != null ? Math.round(props.population_day).toLocaleString() : null), dataRow("Tower sites", props.tower_count), dataRow("Built-up ratio", props.built_up_ratio != null ? `${(props.built_up_ratio * 100).toFixed(1)}%` : null), dataRow("Nearest tower", props.dist_to_nearest_tower_m != null ? `${Math.round(props.dist_to_nearest_tower_m)} m` : null)
-    ].join("") || "<p class='text-summary'>No static context available.</p>"}</div>${state.onset ? `<div class="cell-data-group"><h5>${state.finals ? "Finals quarterly forecast" : "Forecast output"} <span class="cheat-badge ai">AI MODEL</span></h5>${finalsForecastRows}${state.finals ? `<p class="text-summary">Measurement support reflects Ookla coverage, not model confidence. Quarterly rank is not a probability.</p>` : ""}</div>` : ""}</section>`;
+    ].join("") || "<p class='text-summary'>No static context available.</p>"}</div>${state.onset ? `<div class="cell-data-group"><h5>${state.finals ? "Finals quarterly forecast" : "Forecast output"} <span class="cheat-badge ai">AI MODEL</span></h5>${finalsForecastRows}${state.finals ? `<p class="text-summary">Quarterly measurement support reflects Ookla coverage, not model confidence. Quarterly rank is not a probability.</p>` : ""}</div>` : ""}</section>`;
   } else {
     const driverRows = [1, 2, 3].map(n => ({ label: onsetValue(`risk_driver_${n}_label`, c), value: onsetValue(`risk_driver_${n}_value`, c), family: onsetValue(`risk_driver_${n}_family`, c) })).filter(row => row.label);
     const protectiveRows = [1, 2].map(n => ({ label: onsetValue(`protective_${n}_label`, c), value: onsetValue(`protective_${n}_value`, c), family: onsetValue(`protective_${n}_family`, c) })).filter(row => row.label);
@@ -2887,15 +3114,14 @@ function renderSelectedAreaInsights() {
     const support = onsetValue("measurement_support", c);
     const tests = onsetValue("ookla_tests", c);
     const driverSummary = drivers.length ? drivers.slice(0, 2).join(" · ") : "";
-    const contributorRow = row => `<li><div><b>${row.label}</b><small>${row.family ?? "Model contributor"}</small></div><strong>${row.value ?? "—"}</strong></li>`;
-    const modelExplanation = aiRank != null ? `<details class="cell-summary-disclosure"><summary><span>Model explanation</span><small>AI MODEL · SHAP contributors</small></summary><div class="cell-disclosure-body"><p>These factors contributed to the model's risk assessment; they are not verified engineering explanations.</p><h5>Risk contributors</h5><ul class="cell-contributor-list">${driverRows.map(contributorRow).join("")}</ul>${protectiveRows.length ? `<h5>Protective contributors</h5><ul class="cell-contributor-list protective">${protectiveRows.map(contributorRow).join("")}</ul>` : ""}<div class="cell-data-row"><span>Risk band and rank</span><b>${ONSET_TIER_LABELS[aiTier]} · #${Math.round(aiRank)}</b></div>${dataRow("Risk percentile", onsetValue("risk_percentile", c) != null ? `${onsetValue("risk_percentile", c).toFixed(1)}%` : null)}</div></details>` : "";
-    const supportBlock = support ? `<div class="cell-summary-row"><div><span>Measurement support</span><b>${support}</b><small>${tests != null ? `${tests} Ookla tests · evidence coverage, not model confidence` : "Evidence coverage, not model confidence"}</small></div><span class="cheat-badge real">REAL OOKLA</span></div>` : "";
+    const modelExplanation = aiRank != null ? `<details class="cell-summary-disclosure"><summary><span>Model explanation</span><small>AI MODEL · contributors</small></summary><div class="cell-disclosure-body"><p>These factors are contributors to the model's risk assessment. They influenced its ranking and do not establish engineering cause.</p><h5>Risk contributors</h5><ul class="cell-contributor-list">${driverRows.map(row => modelContributorHtml(row, "higher")).join("")}</ul>${protectiveRows.length ? `<h5>Protective contributors</h5><ul class="cell-contributor-list protective">${protectiveRows.map(row => modelContributorHtml(row, "lower")).join("")}</ul>` : ""}<div class="cell-data-row"><span>Risk band and rank</span><b>${ONSET_TIER_LABELS[aiTier]} · #${Math.round(aiRank)}</b></div>${dataRow("Risk percentile", onsetValue("risk_percentile", c) != null ? `${onsetValue("risk_percentile", c).toFixed(1)}%` : null)}</div></details>` : "";
+    const supportBlock = support ? `<div class="cell-summary-row"><div><span>Quarterly measurement support</span><b>${support}</b><small>${tests != null ? `${tests} Ookla tests · evidence coverage, not model confidence` : "Evidence coverage, not model confidence"}</small></div><span class="cheat-badge real">REAL OOKLA</span></div>` : "";
     const forecastBlock = aiRank != null ? metric("Next-quarter AI status", `${ONSET_TIER_LABELS[aiTier]} · rank #${Math.round(aiRank)}`) : "";
     const whyBlock = aiRank != null ? `<div class="cell-summary-row cell-model-summary"><div><span>Why the model flagged it</span><b>${driverSummary || "Review model contributors"}</b><small>Contributors to the risk assessment</small></div><span class="cheat-badge ai">AI MODEL</span></div>` : "";
     const trackingStatus = state.tracking[h3] || "";
     const fmtNumber = (value, digits = 1) => value == null ? null : Number(value).toLocaleString(undefined, { maximumFractionDigits: digits });
     const fmtUnit = (value, unit, digits = 1) => value == null ? null : `${fmtNumber(value, digits)} ${unit}`;
-    content = `<section class="cell-intel-section cell-overview cell-summary-first"><div class="cell-meaning"><span>What this means</span><p>${currentMeaning}</p></div><div class="cell-status-pair">${metric("Current observed status", quarterlyStatusLabel, quarterlyStatus === "currently_underperforming" ? "critical" : "")}${forecastBlock}</div><div class="cell-metric-section"><div class="cell-section-label"><span>Quarterly network measurements</span><span class="cheat-badge real">REAL OOKLA</span></div><div class="cell-metric-strip">${metric("Download", quarterlyDl != null ? `${quarterlyDl.toFixed(1)} Mbps` : null)}${metric("Upload", quarterlyUl != null ? `${quarterlyUl.toFixed(1)} Mbps` : null)}${metric("Latency", quarterlyRtt != null ? `${quarterlyRtt.toFixed(1)} ms` : null)}</div></div><div class="cell-summary-stack">${whyBlock}${supportBlock}<div class="cell-summary-row cell-priority-summary"><div><span>Investigation priority</span><b>${priorityMeaning}</b><small>${quarterlyStatus === "currently_underperforming" ? "REVEAL → PRIORITISE" : "ANTICIPATE → EXPLAIN → PRIORITISE"}</small></div><i class="bi bi-arrow-right-circle"></i></div></div><div class="cell-disclosures"><details class="cell-summary-disclosure"><summary><span>Area context</span><small>Location and contextual variables</small></summary><div class="cell-disclosure-body">${dataRow("H3 cell", h3)}${dataRow("District population", fmtNumber(onsetValue("district_population", c), 0))}${dataRow("Population density", fmtUnit(onsetValue("population_density_per_km2", c), "people/km²", 1))}${dataRow("Population (day)", fmtNumber(onsetValue("population_day", c) ?? props.population_day, 0))}${dataRow("Tower density", fmtUnit(onsetValue("tower_density_per_km2", c), "sites/km²", 2))}${dataRow("Nearest tower", fmtUnit(onsetValue("dist_to_nearest_tower_m", c) ?? props.dist_to_nearest_tower_m, "m", 0))}${dataRow("Building density", fmtUnit(onsetValue("building_density_per_km2", c), "buildings/km²", 1))}${dataRow("Built-up ratio", onsetValue("built_up_ratio", c) != null ? `${(onsetValue("built_up_ratio", c) * 100).toFixed(1)}%` : props.built_up_ratio != null ? `${(props.built_up_ratio * 100).toFixed(1)}%` : null)}${dataRow("Road density", fmtUnit(onsetValue("road_density_km_per_km2", c), "km/km²", 2))}${dataRow("Intersection density", fmtUnit(onsetValue("intersection_density_per_km2", c), "per km²", 1))}${dataRow("Nearest transit", fmtUnit(onsetValue("dist_to_nearest_transit_m", c), "m", 0))}${dataRow("Human-activity proxy (VIIRS)", fmtNumber(onsetValue("viirs_rad_quarter", c), 2), "Proxy only; not measured network demand")}${dataRow("VIIRS year-on-year change", fmtNumber(onsetValue("viirs_rad_yoy_log_ratio", c), 3))}</div></details>${modelExplanation}<details class="cell-summary-disclosure"><summary><span>Investigation tracking</span><small>Status and next check</small></summary><div class="cell-disclosure-body"><p><b>Primary investigation hypothesis:</b> ${CAUSE_LABELS[cause]}</p>${cellSignals.length > 1 ? `<p><b>Supporting signals:</b> ${cellSignals.slice(1).map(key => CAUSE_LABELS[key]).join(" · ")}</p>` : ""}<p><b>Scenario measurement support:</b> ${cellSupport.label}</p><p><b>Investigation option:</b> ${ACTIONS[cause]}</p><label class="cell-status-control"><span>Status</span><select onchange="setTracking('${h3}', this.value || null)"><option value="">Not set</option><option value="planned" ${trackingStatus === "planned" ? "selected" : ""}>Planned</option><option value="investigating" ${trackingStatus === "investigating" ? "selected" : ""}>Investigating</option><option value="done" ${trackingStatus === "done" ? "selected" : ""}>Resolved</option></select></label></div></details><details class="cell-summary-disclosure"><summary><span>Demo / Scenario hourly playback</span><small>Separate from quarterly real data</small></summary><div class="cell-disclosure-body"><span class="cheat-badge sim">DEMO / SCENARIO</span><small class="cell-scenario-time">${timestampLabel}</small>${dataRow("Scenario status", statusLabel)}${dataRow("QoE", metrics.qoe != null ? `${metrics.qoe.toFixed(1)} / 100` : null)}${dataRow("Download", metrics.dl != null ? `${metrics.dl.toFixed(1)} Mbps` : null)}${dataRow("Upload", metrics.ul != null ? `${metrics.ul.toFixed(1)} Mbps` : null)}${dataRow("RTT", metrics.rtt != null ? `${metrics.rtt.toFixed(1)} ms` : null)}${dataRow("Jitter", metrics.jitter != null ? `${metrics.jitter.toFixed(1)} ms` : null)}${dataRow("Packet loss", metrics.loss != null ? `${metrics.loss.toFixed(2)}%` : null)}${dataRow("Demand pressure proxy", metrics.demand != null ? metrics.demand.toFixed(1) : null)}${dataRow("Scenario measurement support", cellSupport.label, cellValue("confidence", t, c) != null ? `${(cellValue("confidence", t, c) * 100).toFixed(0)}% confidence` : "Unavailable")}${dataRow("Hotspot classification", hotspot)}${pulse}</div></details><details class="cell-summary-disclosure"><summary><span>Technical details</span><small>Quarterly fields and interpretation</small></summary><div class="cell-disclosure-body">${dataRow("Observed current status", quarterlyStatusLabel)}${dataRow("Forecast quarter", onsetValue("forecast_for_quarter", c))}${dataRow("AI risk band", aiRank != null ? ONSET_TIER_LABELS[aiTier] : null)}${dataRow("AI risk rank", aiRank != null ? `#${Math.round(aiRank)}` : null)}${dataRow("Risk percentile", onsetValue("risk_percentile", c) != null ? `${onsetValue("risk_percentile", c).toFixed(1)}%` : null)}${dataRow("Download percentile", onsetValue("dl_percentile_in_quarter", c) != null ? onsetValue("dl_percentile_in_quarter", c).toFixed(1) : null)}${dataRow("Historical underperformance rate", fmtNumber(onsetValue("below_area_norm_rate_to_date", c), 3))}${dataRow("Recent average download", fmtUnit(onsetValue("rolling_mean_4q_dl", c), "Mbps", 1))}${dataRow("Previous-quarter download", fmtUnit(onsetValue("lag_1q_dl", c), "Mbps", 1))}${state.finalsActualRevealed ? dataRow("Next-quarter observed status", onsetValue("actual_next_quarter_status", c)?.replaceAll("_", " ")) : ""}${state.finalsActualRevealed ? dataRow("Time Machine result", timeMachineLabel(onsetValue("time_machine_result", c))) : ""}${dataRow("Score is probability", onsetValue("score_is_probability", c) === false ? "No" : null)}${dataRow("Interpretation note", onsetValue("interpretation_note", c))}</div></details></div></section>`;
+    content = `<section class="cell-intel-section cell-overview cell-summary-first"><div class="cell-meaning"><span>What this means</span><p>${currentMeaning}</p></div><div class="cell-status-pair">${metric("Current observed status", quarterlyStatusLabel, quarterlyStatus === "currently_underperforming" ? "critical" : "")}${forecastBlock}</div><div class="cell-metric-section"><div class="cell-section-label"><span>Quarterly network measurements</span><span class="cheat-badge real">REAL OOKLA</span></div><div class="cell-metric-strip">${metric("Download", quarterlyDl != null ? `${quarterlyDl.toFixed(1)} Mbps` : null)}${metric("Upload", quarterlyUl != null ? `${quarterlyUl.toFixed(1)} Mbps` : null)}${metric("Latency", quarterlyRtt != null ? `${quarterlyRtt.toFixed(1)} ms` : null)}</div></div><div class="cell-summary-stack">${whyBlock}${supportBlock}<div class="cell-summary-row cell-priority-summary"><div><span>Investigation priority</span><b>${priorityMeaning}</b><small>${quarterlyStatus === "currently_underperforming" ? "REVEAL → PRIORITISE" : "ANTICIPATE → EXPLAIN → PRIORITISE"}</small></div><i class="bi bi-arrow-right-circle"></i></div></div><div class="cell-disclosures"><details class="cell-summary-disclosure"><summary><span>Area context</span><small>Location and contextual variables</small></summary><div class="cell-disclosure-body">${dataRow("H3 cell", h3)}${dataRow("District population", fmtNumber(onsetValue("district_population", c), 0))}${dataRow("Population density", fmtUnit(onsetValue("population_density_per_km2", c), "people/km²", 1))}${dataRow("Population (day)", fmtNumber(onsetValue("population_day", c) ?? props.population_day, 0))}${dataRow("Tower density", fmtUnit(onsetValue("tower_density_per_km2", c), "sites/km²", 2))}${dataRow("Nearest tower", fmtUnit(onsetValue("dist_to_nearest_tower_m", c) ?? props.dist_to_nearest_tower_m, "m", 0))}${dataRow("Building density", fmtUnit(onsetValue("building_density_per_km2", c), "buildings/km²", 1))}${dataRow("Built-up ratio", onsetValue("built_up_ratio", c) != null ? `${(onsetValue("built_up_ratio", c) * 100).toFixed(1)}%` : props.built_up_ratio != null ? `${(props.built_up_ratio * 100).toFixed(1)}%` : null)}${dataRow("Road density", fmtUnit(onsetValue("road_density_km_per_km2", c), "km/km²", 2))}${dataRow("Intersection density", fmtUnit(onsetValue("intersection_density_per_km2", c), "per km²", 1))}${dataRow("Nearest transit", fmtUnit(onsetValue("dist_to_nearest_transit_m", c), "m", 0))}${dataRow("Human-activity proxy (VIIRS)", fmtNumber(onsetValue("viirs_rad_quarter", c), 1), "Proxy only; not measured network demand")}${dataRow("VIIRS year-on-year change", fmtNumber(onsetValue("viirs_rad_yoy_log_ratio", c), 2))}</div></details>${modelExplanation}<details class="cell-summary-disclosure"><summary><span>Investigation tracking</span><small>Status and next check</small></summary><div class="cell-disclosure-body"><p><b>Primary investigation hypothesis:</b> ${CAUSE_LABELS[cause]}</p>${cellSignals.length > 1 ? `<p><b>Supporting signals:</b> ${cellSignals.slice(1).map(key => CAUSE_LABELS[key]).join(" · ")}</p>` : ""}<p><b>Scenario evidence coverage:</b> ${cellSupport.label}</p><p><b>Investigation option:</b> ${ACTIONS[cause]}</p><label class="cell-status-control"><span>Status</span><select onchange="setTracking('${h3}', this.value || null)"><option value="">Not set</option><option value="planned" ${trackingStatus === "planned" ? "selected" : ""}>Planned</option><option value="investigating" ${trackingStatus === "investigating" ? "selected" : ""}>Investigating</option><option value="done" ${trackingStatus === "done" ? "selected" : ""}>Resolved</option></select></label></div></details><details class="cell-summary-disclosure"><summary><span>Demo / Scenario hourly playback</span><small>Separate from quarterly real data</small></summary><div class="cell-disclosure-body"><span class="cheat-badge sim">DEMO / SCENARIO</span><small class="cell-scenario-time">${timestampLabel}</small>${dataRow("Scenario status", statusLabel)}${dataRow("QoE", metrics.qoe != null ? `${metrics.qoe.toFixed(1)} / 100` : null)}${dataRow("Download", metrics.dl != null ? `${metrics.dl.toFixed(1)} Mbps` : null)}${dataRow("Upload", metrics.ul != null ? `${metrics.ul.toFixed(1)} Mbps` : null)}${dataRow("RTT", metrics.rtt != null ? `${metrics.rtt.toFixed(1)} ms` : null)}${dataRow("Jitter", metrics.jitter != null ? `${metrics.jitter.toFixed(1)} ms` : null)}${dataRow("Packet loss", metrics.loss != null ? `${metrics.loss.toFixed(2)}%` : null)}${dataRow("Scenario Pressure", metrics.demand != null ? metrics.demand.toFixed(1) : null)}${dataRow("Scenario evidence coverage", cellSupport.label, cellValue("confidence", t, c) != null ? `${(cellValue("confidence", t, c) * 100).toFixed(0)}% confidence` : "Unavailable")}${dataRow("Hotspot classification", hotspot)}${pulse}</div></details><details class="cell-summary-disclosure"><summary><span>Technical details</span><small>Quarterly fields and interpretation</small></summary><div class="cell-disclosure-body">${dataRow("Observed current status", quarterlyStatusLabel)}${dataRow("Forecast quarter", onsetValue("forecast_for_quarter", c))}${dataRow("AI risk band", aiRank != null ? ONSET_TIER_LABELS[aiTier] : null)}${dataRow("AI risk rank", aiRank != null ? `#${Math.round(aiRank)}` : null)}${dataRow("Risk percentile", onsetValue("risk_percentile", c) != null ? `${onsetValue("risk_percentile", c).toFixed(1)}%` : null)}${dataRow("Download percentile", onsetValue("dl_percentile_in_quarter", c) != null ? onsetValue("dl_percentile_in_quarter", c).toFixed(1) : null)}${dataRow("Historical underperformance rate", formatModelObservedValue("Historical underperformance rate", onsetValue("below_area_norm_rate_to_date", c)))}${dataRow("Recent average download", fmtUnit(onsetValue("rolling_mean_4q_dl", c), "Mbps", 1))}${dataRow("Previous-quarter download", fmtUnit(onsetValue("lag_1q_dl", c), "Mbps", 1))}${state.finalsActualRevealed ? dataRow("Next-quarter observed status", onsetValue("actual_next_quarter_status", c)?.replaceAll("_", " ")) : ""}${state.finalsActualRevealed ? dataRow("Time Machine result", timeMachineLabel(onsetValue("time_machine_result", c))) : ""}${dataRow("Score is probability", onsetValue("score_is_probability", c) === false ? "No" : null)}${dataRow("Interpretation note", onsetValue("interpretation_note", c))}</div></details></div></section>`;
   }
   if (state.insightTab === "overview") {
     const overviewDrivers = [1, 2, 3].map(n => ({ label: onsetValue(`risk_driver_${n}_label`, c), value: onsetValue(`risk_driver_${n}_value`, c), family: onsetValue(`risk_driver_${n}_family`, c) })).filter(row => row.label);
@@ -2908,14 +3134,13 @@ function renderSelectedAreaInsights() {
     const overviewNumber = (value, digits = 1) => value == null ? null : Number(value).toLocaleString(undefined, { maximumFractionDigits: digits });
     const overviewUnit = (value, unit, digits = 1) => value == null ? null : `${overviewNumber(value, digits)} ${unit}`;
     const historyRateTone = value => value == null ? "" : value >= .5 ? "quality-poor" : value >= .2 ? "quality-watch" : "quality-good";
-    const contributorRow = (row, tone = "") => `<li class="${tone}"><div><b>${row.label}</b><small>${row.family ?? "Model contributor"}</small></div><strong>${row.value ?? "—"}</strong>${tone === "quality-good" ? `<em class="value-tone-label">Protective</em>` : ""}</li>`;
     const contextGroup = (title, rows) => `<section class="cell-context-group"><h5>${title}</h5>${rows.filter(Boolean).join("") || `<p class="text-summary">No ${title.toLowerCase()} context available.</p>`}</section>`;
     const aiSummary = aiRank != null ? `<section class="cell-ai-summary risk-${aiTier ?? "unscored"}"><div><span>AI emerging risk</span><b>${ONSET_TIER_LABELS[aiTier] ?? aiTier}</b></div><strong>Rank ${Math.round(aiRank)} <small>of ${state.finals?.metadata?.forecast_eligible_cells?.toLocaleString?.() ?? state.finals?.metadata?.eligible_cell_count?.toLocaleString?.() ?? "2,186"}</small></strong><span class="cheat-badge ai">AI MODEL</span></section>` : quarterlyStatus === "currently_underperforming" ? `<p class="cell-ai-not-required"><i class="bi bi-info-circle"></i>AI emerging-risk forecasting is not required because this issue is already observed.</p>` : "";
-    const modelExplanation = aiRank != null ? `<details class="cell-summary-disclosure"><summary><span>Why the model flagged it</span><small>AI model contributors</small></summary><div class="cell-disclosure-body"><p>These factors contributed to the risk assessment; they are not verified engineering explanations.</p><ul class="cell-contributor-list">${overviewDrivers.map(row => contributorRow(row)).join("")}</ul>${overviewProtective.length ? `<h5>Protective contributors</h5><ul class="cell-contributor-list protective">${overviewProtective.map(row => contributorRow(row, "quality-good")).join("")}</ul>` : ""}${overviewSupport ? `<div class="cell-measurement-support"><span>Measurement support</span><b>${overviewSupport}</b><small>${overviewTests != null ? `${overviewTests} Ookla tests` : "Quarterly evidence coverage"} · not model confidence</small></div>` : ""}</div></details>` : "";
+    const modelExplanation = aiRank != null ? `<details class="cell-summary-disclosure"><summary><span>Why the model flagged it</span><small>AI model contributors</small></summary><div class="cell-disclosure-body"><p>These factors are contributors to the model's risk assessment. They influenced its ranking and do not establish engineering cause.</p><ul class="cell-contributor-list">${overviewDrivers.map(row => modelContributorHtml(row, "higher")).join("")}</ul>${overviewProtective.length ? `<h5>Protective contributors</h5><ul class="cell-contributor-list protective">${overviewProtective.map(row => modelContributorHtml(row, "lower")).join("")}</ul>` : ""}${overviewSupport ? `<div class="cell-measurement-support"><span>Quarterly measurement support</span><b>${overviewSupport}</b><small>${overviewTests != null ? `${overviewTests} Ookla tests` : "Quarterly evidence coverage"} · not model confidence</small></div>` : ""}</div></details>` : "";
     const historicalRate = onsetValue("below_area_norm_rate_to_date", c);
     const recentAverageDl = onsetValue("rolling_mean_4q_dl", c);
     const previousQuarterDl = onsetValue("lag_1q_dl", c);
-    const performanceHistoryRows = `${dataRow("Historical underperformance rate", historicalRate != null ? overviewNumber(historicalRate, 3) : null, "Share of past quarters below the area norm", historyRateTone(historicalRate))}${dataRow("Four-quarter average download", recentAverageDl != null ? overviewUnit(recentAverageDl, "Mbps", 1) : null, "Quarterly performance history", metricTone("download", recentAverageDl))}${dataRow("Previous-quarter download", previousQuarterDl != null ? overviewUnit(previousQuarterDl, "Mbps", 1) : null, "Previous observed quarter", metricTone("download", previousQuarterDl))}`;
+    const performanceHistoryRows = `${dataRow("Historical underperformance rate", historicalRate != null ? formatModelObservedValue("Historical underperformance rate", historicalRate) : null, "Share of past quarters below the area norm", historyRateTone(historicalRate))}${dataRow("Four-quarter average download", recentAverageDl != null ? overviewUnit(recentAverageDl, "Mbps", 1) : null, "Quarterly performance history", metricTone("download", recentAverageDl))}${dataRow("Previous-quarter download", previousQuarterDl != null ? overviewUnit(previousQuarterDl, "Mbps", 1) : null, "Previous observed quarter", metricTone("download", previousQuarterDl))}`;
     const performanceHistory = performanceHistoryRows ? `<details class="cell-summary-disclosure"><summary><span>QoE / performance history</span><small>Quarterly trend context</small></summary><div class="cell-disclosure-body">${performanceHistoryRows}</div></details>` : "";
     content = `<section class="cell-intel-section cell-overview cell-summary-first">
       ${aiSummary}
@@ -2923,9 +3148,9 @@ function renderSelectedAreaInsights() {
       <div class="cell-disclosures">
         ${modelExplanation}
         ${performanceHistory}
-        <details class="cell-summary-disclosure"><summary><span>Area context</span><small>Local context</small></summary><div class="cell-disclosure-body cell-context-groups">${contextGroup("Population", [dataRow("Population density", overviewUnit(onsetValue("population_density_per_km2", c), "people/km²", 1)), dataRow("Day population", overviewNumber(onsetValue("population_day", c) ?? props.population_day, 0))])}${contextGroup("Infrastructure", [dataRow("Tower density", overviewUnit(onsetValue("tower_density_per_km2", c), "sites/km²", 2)), dataRow("Nearest tower", overviewUnit(onsetValue("dist_to_nearest_tower_m", c) ?? props.dist_to_nearest_tower_m, "m", 0)), dataRow("Nearest transit", overviewUnit(onsetValue("dist_to_nearest_transit_m", c), "m", 0))])}${contextGroup("Built environment", [dataRow("Building density", overviewUnit(onsetValue("building_density_per_km2", c), "buildings/km²", 1)), dataRow("Built-up ratio", onsetValue("built_up_ratio", c) != null ? `${(onsetValue("built_up_ratio", c) * 100).toFixed(1)}%` : props.built_up_ratio != null ? `${(props.built_up_ratio * 100).toFixed(1)}%` : null), dataRow("Road density", overviewUnit(onsetValue("road_density_km_per_km2", c), "km/km²", 2)), dataRow("Intersection density", overviewUnit(onsetValue("intersection_density_per_km2", c), "per km²", 1))])}${contextGroup("Activity", [dataRow("Human-activity proxy (VIIRS)", overviewNumber(onsetValue("viirs_rad_quarter", c), 2)), dataRow("VIIRS year-on-year change", overviewNumber(onsetValue("viirs_rad_yoy_log_ratio", c), 3))])}<p class="cell-proxy-note">VIIRS is a human-activity proxy, not measured network demand.</p></div></details>
-        <details class="cell-summary-disclosure"><summary><span>Investigation tracking</span><small>Tracking workflow</small></summary><div class="cell-disclosure-body"><div class="cell-investigation-workflow"><div><span>Primary investigation hypothesis</span><b>${CAUSE_LABELS[cause]}</b></div><div><span>Scenario measurement support</span><b>${cellSupport.label}</b></div><div><span>Recommended next check</span><b>${ACTIONS[cause]}</b></div><label class="cell-status-control"><span>Status</span><select onchange="setTracking('${h3}', this.value || null)"><option value="">Not set</option><option value="planned" ${overviewTracking === "planned" ? "selected" : ""}>Planned</option><option value="investigating" ${overviewTracking === "investigating" ? "selected" : ""}>Investigating</option><option value="done" ${overviewTracking === "done" ? "selected" : ""}>Resolved</option></select></label></div></div></details>
-        <details class="cell-summary-disclosure"><summary><span>Demo / Scenario hourly playback <span class="cheat-badge sim">DEMO / SCENARIO</span></span><small>Hourly demo</small></summary><div class="cell-disclosure-body"><small class="cell-scenario-time">${timestampLabel}</small>${dataRow("QoE", metrics.qoe != null ? `${metrics.qoe.toFixed(1)} / 100` : null, "", metricTone("qoe", metrics.qoe))}${dataRow("Download", metrics.dl != null ? `${metrics.dl.toFixed(1)} Mbps` : null, "", metricTone("download", metrics.dl))}${dataRow("Upload", metrics.ul != null ? `${metrics.ul.toFixed(1)} Mbps` : null, "", metricTone("upload", metrics.ul))}${dataRow("RTT", metrics.rtt != null ? `${metrics.rtt.toFixed(1)} ms` : null, "", metricTone("latency", metrics.rtt))}${dataRow("Jitter", metrics.jitter != null ? `${metrics.jitter.toFixed(1)} ms` : null, "", metricTone("jitter", metrics.jitter))}${dataRow("Packet loss", metrics.loss != null ? `${metrics.loss.toFixed(2)}%` : null, "", metricTone("loss", metrics.loss))}${dataRow("Demand-pressure proxy", metrics.demand != null ? metrics.demand.toFixed(1) : null, "", metricTone("demand", metrics.demand))}${dataRow("Hotspot classification", hotspot)}${pulse}</div></details>
+        <details class="cell-summary-disclosure"><summary><span>Area context</span><small>Local context</small></summary><div class="cell-disclosure-body cell-context-groups">${contextGroup("Population", [dataRow("Population density", overviewUnit(onsetValue("population_density_per_km2", c), "people/km²", 1)), dataRow("Day population", overviewNumber(onsetValue("population_day", c) ?? props.population_day, 0))])}${contextGroup("Infrastructure", [dataRow("Tower density", overviewUnit(onsetValue("tower_density_per_km2", c), "sites/km²", 2)), dataRow("Nearest tower", overviewUnit(onsetValue("dist_to_nearest_tower_m", c) ?? props.dist_to_nearest_tower_m, "m", 0)), dataRow("Nearest transit", overviewUnit(onsetValue("dist_to_nearest_transit_m", c), "m", 0))])}${contextGroup("Built environment", [dataRow("Building density", overviewUnit(onsetValue("building_density_per_km2", c), "buildings/km²", 1)), dataRow("Built-up ratio", onsetValue("built_up_ratio", c) != null ? `${(onsetValue("built_up_ratio", c) * 100).toFixed(1)}%` : props.built_up_ratio != null ? `${(props.built_up_ratio * 100).toFixed(1)}%` : null), dataRow("Road density", overviewUnit(onsetValue("road_density_km_per_km2", c), "km/km²", 2)), dataRow("Intersection density", overviewUnit(onsetValue("intersection_density_per_km2", c), "per km²", 1))])}${contextGroup("Activity", [dataRow("Human-activity proxy (VIIRS)", overviewNumber(onsetValue("viirs_rad_quarter", c), 1)), dataRow("VIIRS year-on-year change", overviewNumber(onsetValue("viirs_rad_yoy_log_ratio", c), 2))])}<p class="cell-proxy-note">VIIRS is a human-activity proxy, not measured network demand.</p></div></details>
+        <details class="cell-summary-disclosure"><summary><span>Investigation tracking</span><small>Tracking workflow</small></summary><div class="cell-disclosure-body"><div class="cell-investigation-workflow"><div><span>Primary investigation hypothesis</span><b>${CAUSE_LABELS[cause]}</b></div><div><span>Scenario evidence coverage</span><b>${cellSupport.label}</b></div><div><span>Recommended next check</span><b>${ACTIONS[cause]}</b></div><label class="cell-status-control"><span>Status</span><select onchange="setTracking('${h3}', this.value || null)"><option value="">Not set</option><option value="planned" ${overviewTracking === "planned" ? "selected" : ""}>Planned</option><option value="investigating" ${overviewTracking === "investigating" ? "selected" : ""}>Investigating</option><option value="done" ${overviewTracking === "done" ? "selected" : ""}>Resolved</option></select></label></div></div></details>
+        <details class="cell-summary-disclosure"><summary><span>Demo / Scenario hourly playback <span class="cheat-badge sim">DEMO / SCENARIO</span></span><small>Hourly demo</small></summary><div class="cell-disclosure-body"><small class="cell-scenario-time">${timestampLabel}</small>${dataRow("QoE", metrics.qoe != null ? `${metrics.qoe.toFixed(1)} / 100` : null, "", metricTone("qoe", metrics.qoe))}${dataRow("Download", metrics.dl != null ? `${metrics.dl.toFixed(1)} Mbps` : null, "", metricTone("download", metrics.dl))}${dataRow("Upload", metrics.ul != null ? `${metrics.ul.toFixed(1)} Mbps` : null, "", metricTone("upload", metrics.ul))}${dataRow("RTT", metrics.rtt != null ? `${metrics.rtt.toFixed(1)} ms` : null, "", metricTone("latency", metrics.rtt))}${dataRow("Jitter", metrics.jitter != null ? `${metrics.jitter.toFixed(1)} ms` : null, "", metricTone("jitter", metrics.jitter))}${dataRow("Packet loss", metrics.loss != null ? `${metrics.loss.toFixed(2)}%` : null, "", metricTone("loss", metrics.loss))}${dataRow("Scenario Pressure", metrics.demand != null ? metrics.demand.toFixed(1) : null, "", metricTone("demand", metrics.demand))}${dataRow("Hotspot classification", hotspot)}${pulse}</div></details>
         <details class="cell-summary-disclosure"><summary><span>Technical details</span><small>Data and methodology</small></summary><div class="cell-disclosure-body">${dataRow("H3 cell", h3)}${dataRow("Observed quarter", state.finals?.metadata?.predictor_quarter)}${dataRow("Forecast quarter", onsetValue("forecast_for_quarter", c))}${dataRow("AI risk band", aiRank != null ? ONSET_TIER_LABELS[aiTier] : null)}${dataRow("AI risk rank", aiRank != null ? `#${Math.round(aiRank)}` : null)}${dataRow("Risk percentile", onsetValue("risk_percentile", c) != null ? `${onsetValue("risk_percentile", c).toFixed(1)}%` : null)}${dataRow("Download percentile", onsetValue("dl_percentile_in_quarter", c) != null ? onsetValue("dl_percentile_in_quarter", c).toFixed(1) : null)}${dataRow("Historical underperformance rate", overviewNumber(onsetValue("below_area_norm_rate_to_date", c), 3), "Share of past quarters below the area norm", historyRateTone(onsetValue("below_area_norm_rate_to_date", c)))}${dataRow("Recent average download", overviewUnit(onsetValue("rolling_mean_4q_dl", c), "Mbps", 1), "Four-quarter performance history", metricTone("download", onsetValue("rolling_mean_4q_dl", c)))}${dataRow("Previous-quarter download", overviewUnit(onsetValue("lag_1q_dl", c), "Mbps", 1), "Previous observed quarter", metricTone("download", onsetValue("lag_1q_dl", c)))}${state.finalsActualRevealed ? dataRow("Next-quarter observed status", onsetValue("actual_next_quarter_status", c)?.replaceAll("_", " ")) : ""}${state.finalsActualRevealed ? dataRow("Time Machine result", timeMachineLabel(onsetValue("time_machine_result", c))) : ""}${dataRow("Score is probability", onsetValue("score_is_probability", c) === false ? "No" : null)}${dataRow("Interpretation note", onsetValue("interpretation_note", c))}</div></details>
       </div>
     </section>`;
@@ -2966,6 +3191,8 @@ function initCellPulseInteractions(root) {
 }
 
 function setInsightTab(tab) {
+  if (!document.body.classList.contains("in-scenario-lab") && tab === "action") { setWorkspaceTool("prioritise"); return; }
+  if (!document.body.classList.contains("in-scenario-lab") && tab === "cause") tab = "ai";
   const body = document.getElementById("selectedAreaBody");
   state.insightTab = tab;
   renderSelectedAreaInsights();
@@ -2979,16 +3206,17 @@ function advanceGuidedDemo() {
   const popover = document.getElementById("guidedDemoPopover");
   const backdrop = document.getElementById("guidedDemoBackdrop");
   const steps = [
-    { label: "REVEAL", tab: "Quarterly status", tool: "overview", mode: "onset", use: "Review the observed current-quarter layer and select a cell.", expect: "Already-underperforming cells are visually separate from currently-normal forecast candidates." },
-    { label: "ANTICIPATE", tab: "Quarterly AI", tool: "ai", mode: "onset", use: "Review the next-quarter emerging-risk ranking for currently-normal cells.", expect: "High and elevated bands order investigation candidates; ranks are not probabilities." },
-    { label: "EXPLAIN", tab: "Selected cell", tool: "cell", mode: "onset", use: "Open Anticipate or Explain for the selected cell.", expect: "SHAP contributors, context, and measurement support explain the assessment without claiming causation." },
-    { label: "PRIORITISE", tab: "Investigation priority", tool: "cell", mode: "onset", use: "Open Prioritise and review the quarterly basis before setting a tracking status.", expect: "Observed issues and top-ranked emerging risks are placed first for investigation." },
+    { label: "REVEAL", tab: "Observed Q1", tool: "overview", mode: "onset", quarterlyView: "observed", use: "Review observed 2026Q1 underperformance and select a cell.", expect: "Only measured 2026Q1 status is encoded on the map." },
+    { label: "ANTICIPATE", tab: "Forecast Q2", tool: "ai", mode: "onset", quarterlyView: "forecast", use: "Review 2026Q2 emerging-risk priorities among cells not underperforming in 2026Q1.", expect: "High and elevated bands order investigation candidates; ranks are not probabilities." },
+    { label: "EXPLAIN", tab: "Selected cell", tool: "cell", mode: "onset", quarterlyView: "forecast", use: "Inspect the selected cell's model contributors and measurement support.", expect: "SHAP contributors explain the assessment without claiming causation." },
+    { label: "PRIORITISE", tab: "Combined workflow", tool: "prioritise", mode: "onset", quarterlyView: "combined", use: "Compare observed issues with the future-risk shortlist before setting a tracking status.", expect: "Observed 2026Q1 issues and selected 2026Q2 risks remain clearly labelled." },
   ];
   state.guidedDemoStep = (state.guidedDemoStep ?? -1) + 1;
   if (state.guidedDemoStep >= steps.length) state.guidedDemoStep = 0;
   const step = steps[state.guidedDemoStep];
   if (step.mode !== "onset" || state.onset) {
     state.colorBy = step.mode;
+    if (step.quarterlyView) state.quarterlyMapView = step.quarterlyView;
     document.getElementById("colorBySelect").value = step.mode;
     syncPrimaryMapControls(); renderMapColors(); renderLegend();
   }
@@ -3097,7 +3325,7 @@ async function exportExecutiveSummary() {
 
   const win = window.open("", "_blank");
   win.document.write(`
-    <html><head><title>GeoQoE Pulse — Executive Summary</title>
+    <html><head><title>GeoQoE Pulse — Scenario Report</title>
     <style>
       body { font-family: Arial, sans-serif; color: #393442; padding: 32px; max-width: 850px; margin: auto; }
       h1 { color: #282330; font-size: 22px; margin-bottom: 0; }.eyebrow { color:#7258b6; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
@@ -3113,7 +3341,7 @@ async function exportExecutiveSummary() {
       .trust { padding:10px 12px; border-radius:8px; background:#f4fbf8; color:#326656; font-size:11px; line-height:1.45; }.disclaimer { font-size:10px; color: #746d7c; margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
       @media print { button { display: none; } }
     </style></head><body>
-      <div class="eyebrow">Operational briefing</div><h1>GeoQoE Pulse</h1>
+      <div class="eyebrow">Demo / Scenario report</div><h1>GeoQoE Pulse</h1>
       <div class="sub">${state.summary.study_area} &middot; Hour: ${new Date(cur.timestamp).toUTCString().replace(" GMT", " UTC")}</div>
 
       <div class="read"><b>Operational read:</b> ${operationalRead}</div>
@@ -3121,17 +3349,17 @@ async function exportExecutiveSummary() {
       <div class="kpis">
         <div class="kpi"><div class="label">Overall QoE</div><div class="value">${cur.avg_qoe?.toFixed(0)}</div></div>
         <div class="kpi"><div class="label">Degraded Cells</div><div class="value">${degradedPct.toFixed(1)}%</div></div>
-        <div class="kpi"><div class="label">Peak demand</div><div class="value">${peakDemand.toFixed(0)}</div></div>
+        <div class="kpi"><div class="label">Peak Scenario Pressure</div><div class="value">${peakDemand.toFixed(0)}</div></div>
         <div class="kpi"><div class="label">Population Affected</div><div class="value">${Math.round(popAffected).toLocaleString()}</div></div>
         <div class="kpi"><div class="label">Total Cells</div><div class="value">${C.toLocaleString()}</div></div>
       </div>
 
       <h2>Recommended operational focus</h2>
-      <div class="priorities">${priorities.length ? priorities.map((p, i) => `<div class="priority"><span class="tag">P${i + 1}</span><b>${cellName(p.h3)}</b><br/><small>${CAUSE_LABELS[p.cause] ?? "Network concern"} · ${ACTIONS[p.cause] ?? "Review evidence and validate in the field."}</small></div>`).join("") : "<div class=\"priority\">No degraded cells meet the current intervention filter.</div>"}</div>
+      <div class="priorities">${priorities.length ? priorities.map((p, i) => `<div class="priority"><span class="tag">P${i + 1}</span><b>${cellName(p.h3)}</b><br/><small>${CAUSE_LABELS[p.cause] ?? "Network concern"} · ${ACTIONS[p.cause] ?? "Review evidence and validate in the field."}</small></div>`).join("") : "<div class=\"priority\">No degraded cells meet the current investigation filter.</div>"}</div>
 
       <h3>Top 5 worst-QoE cells this hour</h3>
       <table>
-        <tr><th>Location</th><th>QoE</th><th>Demand</th><th>Hotspot class</th></tr>
+        <tr><th>Location</th><th>QoE</th><th>Scenario Pressure</th><th>Hotspot class</th></tr>
         ${worst5.map(r => `<tr><td>${cellName(r.h3)}</td><td>${r.qoe?.toFixed(0)}</td><td>${r.demand?.toFixed(0)}</td><td>${state.panel.hotspot_code_labels[r.hotspot]}</td></tr>`).join("")}
       </table>
 
@@ -3143,18 +3371,18 @@ async function exportExecutiveSummary() {
 
       ${state.finals ? `
       <h2>AI forecast context</h2>
-      <p>Finals model <code>${state.finals.metadata.model_version ?? "—"}</code> uses ${state.finals.metadata.predictor_quarter ?? "—"} context to rank ${state.finals.metadata.eligible_cells?.toLocaleString?.() ?? "—"} eligible H3 cells for emerging underperformance in ${state.finals.metadata.forecast_quarter ?? "—"}. High risk is ranks 1–${state.finals.metadata.risk_thresholds?.high_max_rank ?? "—"} and elevated risk continues through rank ${state.finals.metadata.risk_thresholds?.elevated_max_rank ?? "—"}. This is a relative investigation ranking, not an individual probability or verified engineering explanation.</p>` : state.onset ? `
+      <p>Finals model <code>${state.finals.metadata.model_version ?? "—"}</code> uses ${state.finals.metadata.predictor_quarter ?? "—"} context to rank ${state.finals.metadata.eligible_cells?.toLocaleString?.() ?? "—"} evaluable H3 cells for emerging underperformance in ${state.finals.metadata.forecast_quarter ?? "—"}. High risk is ranks 1–${state.finals.metadata.risk_thresholds?.high_max_rank ?? "—"} and elevated risk continues through rank ${state.finals.metadata.risk_thresholds?.elevated_max_rank ?? "—"}. This is a relative investigation ranking, not an individual probability or verified engineering explanation.</p>` : state.onset ? `
       <h2>AI forecast context</h2>
       <p>Onset model <code>${state.onset.model_name}</code> (frozen threshold ${state.onset.model_frozen_threshold.toFixed(3)}) scored at
       ${state.onset.snapshot_timestamp} UTC. Static spatial baseline: ${state.onset.static_observed_cells.toLocaleString()} cells with real
       Ookla labels, ${state.onset.static_ai_estimated_cells.toLocaleString()} AI-estimated. Onset risk scores are relative rankings within a
       simulated scenario, not calibrated probabilities — see the AI Model Info panel for validated precision/recall.</p>` : ""}
 
-      <h2>Data confidence</h2><div class="trust"><b>${state.summary.ookla_anchored_pct}%</b> of cells have scenario QoE re-centred on real quarterly Ookla averages. GIS context uses the documented real static sources; hourly performance and demand remain scenario outputs.</div>
+      <h2>Data confidence</h2><div class="trust"><b>${state.summary.ookla_anchored_pct}%</b> of cells have scenario QoE re-centred on real quarterly Ookla averages. GIS context uses the documented real static sources; hourly performance and Scenario Pressure remain scenario outputs.</div>
 
       <div class="disclaimer">${state.summary.disclaimer}<br/><br/>
         Investigation-signal percentages are a client-side heuristic computed from real static features
-        (tower distance, built-up ratio, latency vs. demand, sample confidence) — the pipeline
+        (tower distance, built-up ratio, latency versus Scenario Pressure, sample confidence) — the pipeline
         itself exports no "likely cause" column. Generated ${new Date().toISOString()}.</div>
       <button onclick="window.print()" style="margin-top:16px;padding:8px 16px;">Print / Save as PDF</button>
     </body></html>
@@ -3199,7 +3427,13 @@ function togglePlay() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  boot().then(renderTrustPanel).catch(err => {
+  document.addEventListener("keydown", event => {
+    if ((event.key === "Enter" || event.key === " ") && event.target.matches(".ai-queue-item[role=button]")) {
+      event.preventDefault();
+      event.target.click();
+    }
+  });
+  boot().then(() => { renderTrustPanel(); syncOperatorChartTheme(); }).catch(err => {
     console.error(err);
     document.body.insertAdjacentHTML("afterbegin",
       `<div style="background:#fee2e2;color:#7f1d1d;padding:12px;text-align:center">

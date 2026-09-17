@@ -2009,3 +2009,28 @@ body.workspace-tool-whatif #workspaceMorePanel .whatif-box {
 .source-status[data-provenance="DEMO / SCENARIO"] { color:var(--ui-demo); background:#fff2d7; }
 .source-status[data-provenance="ACTIVITY PROXY"],.source-status[data-provenance="HEURISTIC"] { color:var(--ui-context); background:#e8f3f6; }
 .source-status[data-provenance="LITERATURE ONLY"] { color:var(--ui-secondary); background:var(--ui-subtle); }
+/* Keep the quarterly decision workflow separate from exploratory scenarios. */
+.workflow-divider { width:70%; border:0; border-top:1px solid #7776; margin:14px auto; }
+.workspace-tool.secondary-tool:not(.active) { opacity:.65; }
+body:not(.in-scenario-lab) .time-control,
+body:not(.in-scenario-lab) #liveIndicator,
+body:not(.in-scenario-lab) #exportReportBtn,
+body:not(.in-scenario-lab) .workspace-hourly-secondary,
+body:not(.in-scenario-lab) .scenario-only,
+body:not(.in-scenario-lab) .map-layer-toggle:has(#toggleWeather) { display:none!important; }
+body:not(.in-scenario-lab) .cell-summary-disclosure:has(.cell-investigation-workflow),
+body:not(.in-scenario-lab) .cell-summary-disclosure:has(.cell-scenario-time) { display:none; }
+#scenarioLabPanel .more-tool-list { display:grid; gap:10px; margin-top:24px; }
+#quarterlyPriorityList > h3 { font-size:17px; margin:20px 0 10px; }
+#quarterlyPriorityList .priority-action-item { margin:12px 0; }
+#quarterlyPriorityList .priority-action-item > button { display:block; margin-top:12px; }
+.scenario-back-link { position:absolute; left:110px; bottom:12px; z-index:1000; background:var(--ui-surface,white); }
+#hourlyPulsePanel .workspace-hourly-secondary { margin-top:0; }
+@media(max-width:760px) { .workflow-divider { width:1px; border-left:1px solid #7776; margin:4px; } .scenario-back-link { position:fixed; left:12px; } }
+.quarterly-queue-item { padding:18px 0; border-bottom:1px solid var(--workspace-line,#e5e1e8); }
+.quarterly-queue-item h3 { font-size:15px; margin:0 0 8px; }
+.quarterly-queue-item p { font-size:12px; margin:6px 0; }
+.quarterly-queue-item small { display:block; color:var(--ui-secondary,#686374); font-size:11px; }
+.quarterly-queue-item button { margin-top:10px; }
+#quarterlyPriorityList details { margin:18px 0; font-size:13px; }
+.scenario-back-link { position:static; display:block; margin:0 0 18px; }

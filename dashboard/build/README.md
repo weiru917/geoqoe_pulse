@@ -15,6 +15,13 @@ not diagnosed root causes. VIIRS is a human-activity proxy, not real network
 demand. Hourly M-Lab / `cell_time_dataset` views are separate and labelled
 **Demo / Scenario**.
 
+For presentations, the quarterly map can be switched between **Observed Q1**,
+**Forecast Q2**, and **Combined**. These are display filters over the same
+validated finals package; they do not recompute model scores or change H3 data.
+The guided walkthrough selects these views in workflow order. The separate
+hourly export is shown only inside Scenario Lab and is labelled **Export
+scenario report**.
+
 A standalone HTML/CSS/JS dashboard (Leaflet + Plotly, Bootstrap for layout)
 built directly on the **real** geoqoe_pulse pipeline output — real Ookla,
 OpenCellID, Google Open Buildings, OpenStreetMap, WorldPop, OpenDOSM, and
@@ -140,11 +147,11 @@ already-computed numbers — nothing here is a new model or a new data file:
   forecast.
 - **Per-cell "why is this cell flagged?" explanation.** For cells at
   elevated risk or currently degraded, the map popup now shows the
-  city-wide z-score of that cell's real RTT/jitter/loss/demand-pressure at
+  city-wide z-score of that cell's real RTT/jitter/loss/Scenario Pressure at
   the AI snapshot hour (🔴 very high / 🟠 elevated / 🟢 normal), plus the
   hour-over-hour QoE change, plus a one-line possible-driver statement
   built from the same rule-based categorization used in
-  Investigation Evidence / Interventions. This is a computed scenario cue,
+  Investigation Evidence / Investigation Priorities. This is a computed scenario cue,
   not a fabricated SHAP value.
 - **Risk score vs. probability, made hard to miss.** Every onset score now
   carries an inline "— NOT a %" tag, and a new **Model behavior** badge on
@@ -155,7 +162,7 @@ already-computed numbers — nothing here is a new model or a new data file:
   the KPI row. Overview shows six presentation-ready cards — Network
   Health, Degraded Cells, AI Forecast, Top Problem Area, Primary Driver,
   Recommended Action — computed from the exact same filtered candidate
-  list the Interventions panel uses, so the two views can't disagree.
+  list the Investigation Priorities panel uses, so the two views can't disagree.
   "Full Dashboard" (default) shows everything as before.
 
 ## 1d. Medium-priority upgrades (new)
@@ -182,8 +189,8 @@ already sitting in `ai_model/` or the pipeline output — nothing fabricated:
   the 168-hour panel, so "what actually happened next" was never
   observed) — this view intentionally uses the model's real held-out
   evaluation instead of fabricating a snapshot-level matrix.
-- **Richer intervention cards.** Each card now has an explicit **Evidence**
-  line (QoE, demand pressure, RTT, persistent-hotspot frequency, and — when
+- **Richer investigation cards.** Each card now has an explicit **Evidence**
+  line (QoE, Scenario Pressure, RTT, persistent-hotspot frequency, and — when
   the AI package is loaded — the cell's latest AI onset risk tier), a
   P1/P2/P3 priority label alongside the existing urgency pill, and a third
   tracking status ("Investigating") between Planned and Resolved.
@@ -211,7 +218,7 @@ scheme, hence the static server.
 ## 3. What's real vs. simulated — read this before quoting a number
 
 `target_qoe_index` (and everything derived from it — degradation class,
-hotspot classes, demand pressure) comes from **`cell_time_dataset.parquet`**,
+hotspot classes, Scenario Pressure) comes from **`cell_time_dataset.parquet`**,
 which the pipeline's own `config.SIMULATION_DISCLAIMER` describes as *"a
 simulated diurnal-demand scenario, not observed network measurements ... a
 software-integration and dashboard-demo fixture."* 60% of cells have that
@@ -230,11 +237,11 @@ states this plainly, and relevant panel headers carry a
 REAL / SIMULATED / HEURISTIC badge so it's never ambiguous which you're
 looking at.
 
-The **Investigation Evidence** breakdown and **Interventions** ranking's possible-driver
+The **Investigation Evidence** breakdown and **Investigation Priorities** ranking's possible-driver
 label are a Demo / Scenario heuristic computed client-side from static features (tower
-distance, built-up ratio, latency vs. demand, sample confidence) — the
+distance, built-up ratio, latency versus Scenario Pressure, sample confidence) — the
 pipeline itself exports no diagnosed-cause column. The **cost estimates** and
-**operator contact** lines on intervention cards are explicitly-labelled
+**operator contact** lines on investigation cards are explicitly labelled
 editable placeholders (`ILLUSTRATIVE_COST_RANGES` / `OPERATOR_CONTACTS` at the
 top of `dashboard.js`) — this dataset has no real per-cell operator
 attribution or verified deployment cost data, so nothing here fabricates
@@ -243,12 +250,12 @@ numbers and presents them as measured.
 ## 4. Feature tour
 
 - **Time slider + Play button** — scrub or animate through all 168 hours; the
-  Demo / Scenario map, KPIs, hotspot lists, investigation evidence, and interventions all update live.
+  Demo / Scenario map, KPIs, hotspot lists, investigation evidence, and investigation queues all update live.
 - **Trend range** (dual slider under the charts) — select a multi-hour window
   for the range summary (avg QoE, total degraded cell-hours, worst hour)
   independent of the single "current hour" used by the map. Hourly/Daily
   toggle re-aggregates the trend charts client-side.
-- **Color by** — QoE, demand pressure, Gi* hotspot class, Local Moran's I
+- **Color by** — QoE, Scenario Pressure, Gi* hotspot class, Local Moran's I
   cluster, or historical next-hour risk.
 - **Application-specific QoE profiles** (Balanced / Video Calling / Gaming /
   Streaming) — reweights the composite QoE formula for a specific use case.
@@ -271,7 +278,7 @@ numbers and presents them as measured.
   generator. Says so directly in the UI. Shows a real before/after: degraded
   cell count and avg QoE, recomputed against the pipeline's actual
   degradation thresholds.
-- **📄 Export Executive Summary** — opens a print-ready report (KPIs, top-5
+- **📄 Export scenario report** — opens a print-ready hourly Demo / Scenario report (KPIs, top-5
   worst cells with real coordinates, QoE trend and root-cause chart images)
   in a new tab; use your browser's native Print → Save as PDF. Deliberately
   does *not* try to screenshot the Leaflet map (cross-origin tile canvases
@@ -287,13 +294,13 @@ numbers and presents them as measured.
 - **Basemap** — OSM standard (roads/labels) or Carto Light.
 - **Dark mode** — CSS-variable based, persisted per-browser.
 - **Confidence filter** — hides low-sample-count cells (`qoe_confidence_score`)
-  from the ranked lists and interventions; the map always shows every cell.
+  from the ranked lists and investigation queues; the map always shows every cell.
 - **Compare cells** — click the button, then click hexes on the map (up to 5)
   to line them up in a side-by-side table + multi-line QoE history chart.
 - **(?) spatial-stats explainer** next to "Spatial-Temporal Hotspots" — a
   plain-language modal on what Gi* and Local Moran's I actually mean, tied
   to the exact class labels the dashboard uses (hot_99, HH, HL, etc.).
-- **Mark planned / done** on intervention cards, persisted in the browser's
+- **Mark planned / done** on investigation cards, persisted in the browser's
   `localStorage` (this is a standalone page you run locally, not a hosted
   multi-user app, so this is per-machine, not shared).
 - **How to use this dashboard** — collapsible walkthrough at the top, written

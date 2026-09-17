@@ -12,9 +12,28 @@ GeoQoE Pulse helps a regulator, operator, or analyst answer four questions:
 The dashboard combines two deliberately separate time bases:
 
 - **Quarterly validated/finals data:** real quarterly network measurements, current observed status, and the frozen quarterly AI forecast.
-- **Demo / Scenario data:** an hourly scenario used for map playback, hotspot exploration, time-series charts, and intervention examples. It is not live network demand and must not be read as another quarterly measurement.
+- **Demo / Scenario data:** an hourly scenario used for map playback, hotspot exploration, time-series charts, and investigation examples. Its Scenario Pressure proxy is not live network demand and must not be read as another quarterly measurement.
 
 The dashboard supports investigation and prioritisation. It does not diagnose a root cause, prove causality, or replace field/operator validation.
+
+## Simplified presentation navigation
+
+Use the four primary entries for the finals demonstration:
+
+- **Reveal:** current observed quarterly issues, emerging-risk counts, and the highest AI-ranked location.
+- **Anticipate:** frozen next-quarter ranking and Time Machine. Reveal actual outcomes, then use **Back to forecast** to repeat the comparison on the same map.
+- **Explain:** quarterly model contributors for the selected cell; defaults to the highest-ranked cell when no cell is selected.
+- **Prioritise:** the five highest AI-ranked investigation candidates, expandable through rank 20. Already-observed issues are a separate disclosure, with no invented AI ordering.
+
+**Scenario Lab** groups Hourly Pulse, Cell Comparison, Spatial Hotspots, Time-Series Analytics, illustrative what-if capacity, scenario investigation signals, the Hourly Scenario Queue, and AI-versus-scenario comparison. The hourly timeline appears only in the lab. Map lens buttons (QoE, Scenario Pressure, Hotspots, Quarterly AI) and the detailed map settings remain available throughout the dashboard. Returning to the quarterly workflow stops playback and disables any active what-if or rain overlay.
+
+**Data & Trust** remains a secondary navigation entry. Scenario report export is available inside the lab.
+
+The quarterly map provides three presentation-safe views without changing any data: **Observed Q1** shows only measured 2026Q1 status, **Forecast Q2** shows only the 2026Q2 AI priority for evaluable cells, and **Combined** shows the complete handoff from observed status to forecast priority. The guided walkthrough selects the appropriate view automatically for each step.
+
+For population counts, distinguish **2,240 currently-normal cells** from **2,186 evaluable cells with a held-out next-quarter outcome**; 54 have no available outcome. The 2,186 figure is not the total currently-normal population.
+
+The detailed feature reference below describes preserved tools; access hourly and scenario features through Scenario Lab.
 
 ## Before you start
 
@@ -34,7 +53,7 @@ Then open `http://localhost:3000`.
 - **Scenario timeline** — controls the selected hour for Demo / Scenario views. Moving the slider changes hourly scenario maps, charts, hotspots, and selected-cell scenario values. It does not retrain or rerun the quarterly AI model.
 - **Play** — automatically moves through the hourly scenario timeline.
 - **Start guided demo** — steps through the main workflow using the dashboard’s existing guided sequence.
-- **Export briefing** — creates a briefing/report from the currently loaded dashboard information.
+- **Export scenario report** — creates a print-ready report of the currently selected hourly Demo / Scenario state.
 - **Dark-mode button** — switches the visual theme.
 - **Status text** — shows the latest scenario timestamp currently loaded.
 
@@ -52,7 +71,8 @@ The overview contains:
 - **High emerging risk** and **Elevated emerging risk** — counts of currently-normal cells ranked by the quarterly AI model for the next forecast quarter.
 - **Coverage metadata** — measured cells, measurement-support coverage, and Demo / Scenario cell counts. These describe data coverage, not extra risk.
 - **Top Priority** — the highest-ranked forecast-eligible location, its risk band, rank, and an **Inspect cell** button.
-- **Hourly Pulse** — a secondary Demo / Scenario view showing hourly scenario behavior. Treat it as exploratory rather than validated quarterly evidence.
+- **Hourly Pulse** — a quick Demo / Scenario snapshot around the selected hour. It shows QoE and Scenario Pressure together, supports pan/zoom and point hover, and is best for narrating a short operational change.
+- **Time-Series Analytics** — a deeper range-analysis view. Choose separate From/To hours, switch between hourly and daily aggregation, compare QoE, Scenario Pressure and severity charts, and read the summary and interpretation for the complete selected window.
 - **Selected area** — appears after choosing a map hexagon; when no cell is selected, the compact helper tells you to select one.
 
 Use **Inspect cell** or click a hexagon to open the Cell Intelligence panel. Start with the current observed status, then read the quarterly AI priority and measurements.
@@ -129,11 +149,15 @@ It shows:
 
 Signals use the citywide top quartile for the selected scenario hour. They are relative investigation thresholds, not engineering failure thresholds. Percentages do not need to total 100% because one cell may show multiple signals.
 
-Click an evidence bar to filter the Intervention Priorities queue to cells carrying that signal. Measurement support is separate from the possible-driver signals.
+Click an evidence bar to filter the **Hourly Scenario Queue** to cells carrying that signal. Measurement support is separate from the possible-driver signals.
 
 ### Prioritise
 
-Prioritise is the hourly **DEMO / SCENARIO** investigation queue. It answers: **Where should an operator or regulator investigate first?**
+Prioritise is the main quarterly workflow. It lets users switch between **Observed issues · 2026Q1** and the **Future risk shortlist · 2026Q2**, then track Active, Investigating, or Resolved status. It is based on real quarterly observations and the frozen finals AI outputs.
+
+### Hourly Scenario Queue
+
+The Hourly Scenario Queue is an exploratory **DEMO / SCENARIO** queue. It answers: **At the selected simulated hour, which cells would an operational queue surface?** It does not replace or alter the quarterly Prioritise workflow.
 
 Filters:
 
@@ -181,14 +205,14 @@ The **More tools** menu contains secondary views:
 
 - **Time-series analysis** — hourly and daily scenario charts. Use FROM and TO to choose the window, then inspect QoE, scenario pressure, and severity trends. Hover points for details and click a point to jump the map to that hour.
 - **AI vs Scenario Hotspots** — compares the quarterly AI ranking with hourly spatial hotspot detection. The two outputs have different purposes and must not be compared as if they were the same metric.
-- **What-if simulation** — applies illustrative scenario assumptions such as extra capacity. Results are planning approximations, not field-validated intervention predictions.
+- **What-if simulation** — applies illustrative scenario assumptions such as extra capacity. Results are planning approximations, not field-validated operational predictions.
 
 ## Map controls
 
 - **Search place or cell** — type a place name or cell identifier and press Enter; select a match to move/focus the map.
-- **Layers** — opens optional overlays such as quarterly status, QoE demo, demand, hotspots, H3 boundaries, and labels.
+- **Layers** — opens optional overlays such as quarterly status, QoE demo, Scenario Pressure, hotspots, H3 boundaries, and labels.
 - **More map settings (⋯)** — contains detailed lens and QoE profile options. Profiles change the scenario lens; they do not change quarterly model outputs.
-- **QoE / Demand / Hotspots / Quarterly** — mutually exclusive map lenses. Quarterly is the default validated mode.
+- **QoE / Scenario Pressure / Hotspots / Quarterly** — mutually exclusive map lenses. Quarterly is the default validated mode.
 - **Leaflet zoom controls** — zoom in/out without changing the selected cell.
 - **Reveal Actual** — recolors forecast cells by held-out outcome when actual fields are available.
 

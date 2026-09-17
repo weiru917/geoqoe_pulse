@@ -3,10 +3,13 @@
 **A mobile network quality decision-support prototype for the Klang Valley (Kuala Lumpur & surrounding urban Selangor).**
 
 GeoQoE Pulse takes real, open geospatial and network data, combines it into
-one map, and helps a telecom operator or regulator answer two questions:
+one map, and helps a telecom operator or regulator answer four connected
+questions:
 
-1. **Where is mobile internet quality currently bad, and why?**
-2. **Where is it likely to get bad next, and what should we do about it?**
+1. **REVEAL:** Which measured cells are already underperforming in 2026Q1?
+2. **ANTICIPATE:** Which currently-normal cells should be watched for 2026Q2?
+3. **EXPLAIN:** Which model contributors and contextual evidence support review?
+4. **PRIORITISE:** Which locations should an operator or regulator investigate first?
 
 This document is the single entry point for judging — what's inside the
 submission, where every dataset and model actually lives on disk, how the
@@ -41,8 +44,8 @@ This submission has three layers that build on each other:
 | Layer | What it does | Where it lives |
 |---|---|---|
 | **① Data pipeline** | Pulls real open data (cell towers, buildings, roads, population, transit, and real Ookla speed-test data) for **4,918** hexagonal map cells across the Klang Valley, and turns it into one clean, analysis-ready dataset. | `src/`, `data/`, `run_pipeline.py`, `config.py` |
-| **② AI models** | Two trained machine-learning models sit on top of that data: one **estimates** network quality in cells with no direct measurement, and one **ranks** cells by risk of degrading in the next hour. | `Trained AI Model/GeoQoE_AI/` |
-| **③ Interactive dashboard** | A map-based web app where a judge can explore quality, hotspots, AI predictions, and recommended interventions, hour by hour. | `dashboard/build/` |
+| **② AI models** | The finals model ranks currently-normal cells by emerging underperformance risk in the next quarter. Earlier static and next-hour models remain available as legacy/demo artifacts, not the validated default forecast. | `models/finals_quarterly/`, `handoff/finals_ai/`, `Trained AI Model/GeoQoE_AI/` |
+| **③ Interactive dashboard** | A map-based decision-support app combining real quarterly observed status, quarterly AI ranking, model contributors, Time Machine evaluation, and a clearly separated hourly Demo / Scenario lab. | `dashboard/build/` |
 
 **The dashboard (layer ③) is the prototype itself — that's what to open
 first (see §3).** Layers ① and ② are the data/AI engine behind it, included
@@ -68,14 +71,18 @@ report — so judges can inspect the entire pipeline, not just the front end.
 4. **Find hotspots.** Real spatial statistics (Getis-Ord Gi\*, Local
    Moran's I) identify statistically significant clusters of poor quality,
    not just individually bad cells.
-5. **Predict risk.** Two trained XGBoost/logistic models — one estimating
-   quality for cells with no direct measurement, one ranking cells by
-   next-hour degradation risk — sit on top of the real data (full detail
-   in §5).
-6. **Show it all on one dashboard.** A judge can scrub through time,
-   change what the map is colored by, compare cells, simulate "what if we
-   added X% more capacity," and see a ranked, prioritized list of
-   recommended interventions.
+5. **Rank next-quarter emerging risk.** The finals XGBoost model uses the
+   2026Q1 quarterly state to rank 2,186 currently-normal, evaluable cells
+   for possible underperformance in 2026Q2. High means ranks 1–50,
+   Elevated means 51–200, and Lower means 201 onward. The score is a
+   relative ranking, not a calibrated probability.
+6. **Explain without claiming causality.** SHAP values describe which
+   features contributed to the model's ranking. Context and scenario
+   signals guide investigation but are not diagnosed root causes.
+7. **Show it in one decision workflow.** The dashboard follows
+   REVEAL → ANTICIPATE → EXPLAIN → PRIORITISE, while retaining hourly
+   playback, hotspots, comparison and scenario tools under explicit
+   DEMO / SCENARIO labels.
 
 ---
 
@@ -148,19 +155,21 @@ raw pipeline data outside of the map-first dashboard.
 
 ### What to click on first
 
-- Start with the **"How to use this dashboard"** panel at the top — it's
-  written for a first-time viewer.
-- Use the **time slider** to scrub through a full simulated week (168
-  hours).
-- Try the **🤖 Trained AI Model** panel for the model's live risk rankings
-  and its Model Info modal (validated metrics, plain-language limitations).
-- Try **Color by → 🤖 AI Onset Risk** and **🤖 AI Static DL Estimate** on
-  the map, and open a cell's popup — it shows the AI section with a
-  "why is this cell flagged?" explanation.
-- Try the **Overview | Full Dashboard** toggle above the KPI row for a
-  presentation-ready six-card summary.
-- Check the **Data Quality & Trust** panel — every panel is badged
-  REAL / SIMULATED / HEURISTIC so it's always clear what you're looking at.
+- Open **Reveal** and read the three primary KPIs: observed
+  underperformance, High emerging risk and Elevated emerging risk.
+- Select the Top Priority cell or click any quarterly-map hexagon to open
+  **Cell Intelligence**.
+- In **Anticipate**, filter the ranked queue by High, Elevated or Lower,
+  then use **Reveal Actual** in Time Machine to compare forecasts with the
+  held-out next-quarter result.
+- Use **Explain** to review SHAP contributors and scenario evidence without
+  treating them as diagnosed causes.
+- Use **Prioritise** for the actionable shortlist and workflow status.
+- Open **Scenario Lab** only when demonstrating the separate 168-hour
+  hourly scenario. The amber badge is the reminder that it is not the
+  quarterly validated forecast.
+- Check **Data & Trust** for model metadata, provenance, definitions and
+  limitations before quoting results.
 
 ---
 
@@ -344,8 +353,10 @@ files — no backend, no database.
 | `data/panel.json` | Full hourly panel (4,918 cells × 168 hours), columnar | ~64 MB |
 | `data/city_timeseries.json` | Pre-aggregated city-wide stats per hour | ~24 KB |
 | `data/summary_stats.json` | Provenance, KPI constants, disclaimer text | ~4 KB |
-| `data/onset_model.json` (built from `ai_model/dashboard/`) | Per-cell AI static estimate + onset risk, one fixed snapshot | ~1.3 MB |
-| `data/model_card.json` | Frozen AI model's validated metrics + limitations | ~8 KB |
+| `data/finals_quarterly.geojson` | Finals per-cell 2026Q1 inputs, 2026Q2 risk bands/ranks, quarterly measurements and explanation fields | ~5.6 MB |
+| `data/quarterly_observed_2026Q1.geojson` | Separate real 2026Q1 observed-status layer | ~3.7 MB |
+| `data/finals_metadata.json` | Model version, evaluation metrics, risk thresholds, Time Machine definitions and interpretation notes | ~3 KB |
+| `data/onset_model.json`, `data/model_card.json` | Legacy next-hour/static model integration retained for provenance and Demo / Scenario compatibility | ~1.3 MB / ~5 KB |
 
 These are generated from the raw pipeline/AI outputs by
 `build_dashboard_data.py` and `build_onset_data.py` (both already run —
@@ -358,22 +369,24 @@ to exactly 59.98%, matching `feature_dictionary.xlsx`).
 
 **What the dashboard adds on top of raw data:**
 
-- Time slider over the full 168-hour simulated week, with multiple
-  "Color by" map modes (current QoE, degradation, AI onset risk, AI static
-  estimate, AI-vs-traditional hotspot comparison).
-- A ranked, prioritized **Interventions** panel built from the same
-  candidate list used by the Executive Overview cards, so the two views
-  can never disagree with each other.
-- Per-cell popups showing observed vs. AI-estimated speed (with
-  reliability tag), onset status/tier/score, and a rule-based "likely
-  trigger" explanation built from real z-scored RTT/jitter/loss/demand at
-  the AI snapshot hour.
-- An honest time-sync banner: since the onset model was only ever scored
-  for one real hour, the AI panel tells you whether the time slider is
-  currently on that scored hour or not, rather than silently pretending
-  every hour has a live forecast.
-- A **Data Quality & Trust** panel that badges every number on screen as
-  REAL / SIMULATED / HEURISTIC.
+- **Reveal:** an executive summary of current 2026Q1 observed issues,
+  future 2026Q2 AI risk, coverage metadata and the top-priority location.
+- **Compare and Hotspots:** compact hourly scenario comparisons and spatial
+  statistics, explicitly separated from quarterly model outputs.
+- **AI Forecast:** data-driven High/Elevated/Lower filters, a ranked
+  emerging-risk queue, methodology disclosure and Time Machine evaluation.
+- **Explain:** selected-cell quarterly measurements and SHAP contributors,
+  plus independent top-quartile scenario investigation signals. Scenario
+  measurement support is shown separately from possible-driver signals.
+- **Prioritise:** a future-risk shortlist by default, with observed issues
+  available as a secondary view and workflow tracking kept in the browser.
+- **Scenario Lab and Time-Series Analytics:** the 168-hour demonstration
+  timeline, profile/lens controls and detailed hourly trend exploration.
+- **Data & Trust:** provenance, REAL / AI MODEL / DEMO / SCENARIO / HEURISTIC
+  labels, limitations, model metadata and collapsed technical methodology.
+- **Cell Intelligence:** selecting a hexagon synchronises the map and side
+  panel, showing observed status, emerging-risk band/rank, real quarterly
+  measurements, contributors, measurement support and investigation priority.
 
 Full technical detail on every dashboard feature (including a "what-if"
 capacity simulator and the AI-vs-traditional hotspot comparison
@@ -391,15 +404,16 @@ We'd rather over-explain this than have it come up as a surprise question.
 | Quarterly average download/upload speed & latency (2,950 of 4,918 cells, ~60%) | ✅ **Real.** From Ookla's Open Data program. |
 | **14 quarters of real speed data** (`cell_quarter_dataset.parquet`, 2023Q1–2026Q2) | ✅ **Real on both sides.** 3,959,197 independent Ookla speed tests across 3,566 cells. 36,193 rows carry a real one-step-ahead target measured a quarter later — nothing simulated, downscaled or shared-shape. **This is the dataset for any forecasting claim.** |
 | **Hour-by-hour** network quality for the 168-hour (1-week) panel shown in the dashboard's time slider | ⚠️ **Simulated.** No public source of real per-hour QoE exists for this area, so hourly values are generated by a documented diurnal-demand formula. Where a real Ookla number exists for a cell, the simulation is re-centered on it — but the hour-to-hour *shape* is always simulated. This is clearly labelled in the dashboard, never presented as measured. |
-| The two AI models (static quality estimator + next-hour onset risk ranker) | ✅ **Really trained, on real held-out data.** The static model is trained/validated against the real Ookla labels. The onset-risk model is trained on the simulated hourly panel (see above) and evaluated on a real held-out split of it — its own validated precision/recall numbers are shown in the dashboard, including the honest trade-off (high recall, low precision, stated plainly rather than hidden). |
-| Root-cause labels, cost estimates, operator contacts on intervention cards | 🔧 **Heuristic / illustrative placeholders**, computed transparently from real features — not pipeline-measured facts. Clearly labelled as such in the UI. |
+| Finals quarterly emerging-risk model | ✅ **Trained and evaluated on real quarterly measurements.** It ranks currently-normal cells using 2026Q1 data for 2026Q2 review. Its output is a relative priority ranking, not a probability or guaranteed failure prediction. |
+| Legacy static and next-hour model artifacts | ⚠️ **Retained for provenance/demo compatibility.** They are not the dashboard's validated default quarterly forecast. |
+| SHAP contributors and investigation signals | 🔧 **Explanatory / heuristic evidence.** SHAP explains the model's ranking behaviour; percentile-based scenario signals support investigation. Neither establishes engineering root cause. |
 
-**Bottom line for judges asking "is this real data?":** the static spatial
-layer (towers, buildings, population, real Ookla speeds) is 100% real and
-is what the AI static-quality model is trained and validated on. The
-animated hour-by-hour view is an honestly-labelled simulation used to
-demonstrate what the dashboard and forecasting pipeline would look like
-running on live data.
+**Bottom line for judges asking "is this real data?":** the quarterly
+observations and finals next-quarter modelling dataset use real Ookla
+measurements. Towers, buildings, population and geographic context also
+come from real open sources. The animated hour-by-hour view is a separate,
+honestly-labelled simulation used to demonstrate how operational monitoring
+could work with a live feed.
 
 ---
 
@@ -493,11 +507,13 @@ nothing is missing.
   G.107/P.1203 standard.
 - The static AI model's spatial out-of-fold R² is low (≈0.02) — treat it
   as a rough estimator/blind-spot filler, not a precise Mbps prediction.
-- The onset model's risk score is uncalibrated and class-weighted by
-  design — high recall, low precision at the frozen threshold (stated
-  plainly in the dashboard rather than hidden).
-- Root cause, cost, and operator-contact fields on intervention cards are
-  editable illustrative placeholders, not measured pipeline outputs.
+- The finals model output is a relative ranking score, not a calibrated
+  probability. High/Elevated bands are prioritisation policies, not
+  engineering failure thresholds or guarantees of future degradation.
+- Time Machine results are retrospective held-out evaluation outcomes;
+  they demonstrate validation behaviour but do not guarantee future results.
+- Investigation hypotheses and scenario signals are decision-support cues,
+  not diagnosed root causes or engineering failure thresholds.
 - `dashboard/build/data/panel.json` is ~64 MB and loads once on page
   load — fine for a local judged demo, a few seconds on a slow connection.
 - The Docker path is written to standard conventions but was untested in
