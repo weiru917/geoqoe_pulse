@@ -276,6 +276,10 @@ body.app-page-command #analysisStage > .workspace-analysis-panel { background:va
 .cell-explain-context.risk-high b,.cell-explain-context.is-observed-issue b { color:var(--op-danger); }
 .cell-explain-context.risk-elevated b { color:#9a5d08; }
 .cell-explain-context.is-observed-issue span i { color:var(--op-danger); }
+.cell-explain-unavailable { display:grid; grid-template-columns:auto minmax(0,1fr); gap:10px; align-items:start; margin:10px 0 14px; padding:12px; border:1px solid var(--op-border); border-radius:8px; background:var(--op-subtle); }
+.cell-explain-unavailable > i { margin-top:2px; color:var(--op-accent); font-size:15px; }
+.cell-explain-unavailable b { color:var(--op-text); font-size:13px; font-weight:700; }
+.cell-explain-unavailable p { margin:4px 0 10px; color:var(--op-secondary); font-size:12px; line-height:1.45; }
 .cell-validation-result.compact { margin:0 0 8px; padding:7px 10px; }
 .ai-insight .cell-ai-hero { grid-template-columns:96px minmax(0,1fr); align-items:center; gap:14px; margin:12px 0 10px; padding:16px 18px; border:1px solid var(--op-border); border-radius:10px; background:linear-gradient(135deg,var(--op-tint),var(--op-subtle)); box-shadow:none; }
 .ai-insight .cell-ai-hero strong { grid-row:1 / span 2; color:var(--op-accent); font-size:36px; font-weight:800; line-height:1; letter-spacing:0; }

@@ -1189,18 +1189,20 @@ function playMapFlyRing(props) {
 }
 
 function selectArea(h3) {
+  const preserveExplain = state.workspaceTool === "explain" ||
+    (state.workspaceTool === "cell" && state.insightTab === "ai");
   if (state.activeHoverLayer) state.activeHoverLayer.closeTooltip();
   state.activeHoverLayer = null;
   state.map?.closePopup();
   state.selectedH3 = h3;
-  state.insightTab = "overview";
+  state.insightTab = preserveExplain ? "ai" : "overview";
   renderMapColors();
   renderSelectedAreaInsights();
   syncWorkspaceSelection();
   syncMapSelectedBar();
   syncMapWorkspaceInsight();
   syncActiveToolSelection();
-  if (state.workspaceTool !== "cell") setWorkspaceTool("cell");
+  if (!preserveExplain && state.workspaceTool !== "cell") setWorkspaceTool("cell");
   const panel = document.getElementById("selectedAreaPanel");
   document.getElementById("analysisStage")?.scrollTo({ top: 0, behavior: "instant" });
   if (window.gsap && panel && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -3074,12 +3076,15 @@ function renderSelectedAreaInsights() {
         ? `<div class="cell-explain-context risk-${aiTier ?? "unscored"}"><span><i class="bi bi-circle-fill"></i>${quarterlyStatusLabel} · ${state.finals.metadata.predictor_quarter}</span><b>${ONSET_TIER_LABELS[aiTier] ?? aiTier} · rank #${Math.round(aiRank)}</b></div>`
         : `<div class="cell-explain-context ${quarterlyStatus === "currently_underperforming" ? "is-observed-issue" : "is-unscored"}"><span><i class="bi bi-circle-fill"></i>${quarterlyStatusLabel} · ${state.finals.metadata.predictor_quarter}</span><b>${quarterlyStatus === "currently_underperforming" ? "Observed issue · not forecast-eligible" : "No quarterly AI ranking"}</b></div>`
       : `<div class="cell-explain-context risk-${aiTier ?? "unscored"}"><span>${aiStatus?.replaceAll("_", " ") ?? "Forecast context"}</span><b>${aiRank != null ? `${ONSET_TIER_LABELS[aiTier] ?? aiTier} · rank #${Math.round(aiRank)}` : "Not scored"}</b></div>`;
-    content = `<section class="cell-intel-section ai-insight"><div class="cell-section-heading"><div><div class="cell-title-row"><span class="cell-intel-kicker">EXPLAIN</span><span class="cheat-badge ai">QUARTERLY AI</span></div><h4>Why the model flagged this cell</h4></div></div>${explainContext}${state.finalsActualRevealed && heldOutResult ? `<div class="cell-validation-result compact"><span>Held-out ${state.finals.metadata.forecast_quarter} result</span><b>${timeMachineLabel(heldOutResult)}</b></div>` : ""}
-      <div class="cell-intel-note"><i class="bi bi-info-circle"></i>${state.finals ? "These factors are contributors to the model's risk assessment. They influenced its ranking and do not establish engineering cause. Risk rank is not an individual probability." : "AI values are a relative rank for prioritisation, not a probability of failure."}</div>
-      ${signalRows || qoeEvidence ? `<h5>Risk-assessment contributors</h5><ul class="cell-evidence-list">${signalRows}${qoeEvidence}</ul>${finalsProtective.length ? `<h5>Protective contributors</h5><ul class="cell-evidence-list protective">${finalsProtective.map(finalsProtectiveRow).join("")}</ul>` : ""}${remainingSignalRows ? `<details class="cell-detail-disclosure"><summary>All available model signals</summary><ul class="cell-evidence-list">${remainingSignalRows}</ul></details>` : ""}` : `<p class="text-summary">No cell-level forecast evidence is available for this selected cell.</p>`}
-      ${quarterlyContext ? `<details class="cell-detail-disclosure"><summary>Geographic and activity context</summary><div class="cell-data-group">${quarterlyContext}</div></details>` : ""}
-      ${!state.finals && aiScore != null ? `<details><summary>Model scoring detail</summary><p>Relative score: <b>${aiScore.toFixed(2)}</b>. Snapshot: ${state.onset?.snapshot_timestamp ?? "—"} UTC. The score should be used to order investigation, not as a calibrated likelihood.</p></details>` : ""}
-      <div class="cell-intel-flow"><span>View full model explanation</span><i class="bi bi-arrow-right"></i><button class="btn btn-sm btn-outline-primary" onclick="setInsightTab('overview')">Review quarterly measurements</button></div><button class="cell-secondary-link" onclick="setWorkspaceTool('ai')">Open full quarterly forecast</button></section>`;
+    const noQuarterlyExplanation = state.finals && aiRank == null;
+    const explanationBody = noQuarterlyExplanation
+      ? `<div class="cell-explain-unavailable"><i class="bi bi-info-circle"></i><div><b>No emerging-risk explanation for this cell</b><p>${quarterlyStatus === "currently_underperforming" ? `This cell is already underperforming in ${state.finals.metadata.predictor_quarter}, so it was excluded from the currently-normal population ranked for ${state.finals.metadata.forecast_quarter}.` : "This cell is outside the evaluable quarterly forecast population."}</p><button class="btn btn-sm btn-outline-primary" onclick="setInsightTab('overview')">Review observed status and measurements</button></div></div>`
+      : `<div class="cell-intel-note"><i class="bi bi-info-circle"></i>${state.finals ? "These factors are contributors to the model's risk assessment. They influenced its ranking and do not establish engineering cause. Risk rank is not an individual probability." : "AI values are a relative rank for prioritisation, not a probability of failure."}</div>
+        ${signalRows || qoeEvidence ? `<h5>Risk-assessment contributors</h5><ul class="cell-evidence-list">${signalRows}${qoeEvidence}</ul>${finalsProtective.length ? `<h5>Protective contributors</h5><ul class="cell-evidence-list protective">${finalsProtective.map(finalsProtectiveRow).join("")}</ul>` : ""}${remainingSignalRows ? `<details class="cell-detail-disclosure"><summary>All available model signals</summary><ul class="cell-evidence-list">${remainingSignalRows}</ul></details>` : ""}` : `<p class="text-summary">No cell-level forecast evidence is available for this selected cell.</p>`}
+        ${quarterlyContext ? `<details class="cell-detail-disclosure"><summary>Geographic and activity context</summary><div class="cell-data-group">${quarterlyContext}</div></details>` : ""}
+        ${!state.finals && aiScore != null ? `<details><summary>Model scoring detail</summary><p>Relative score: <b>${aiScore.toFixed(2)}</b>. Snapshot: ${state.onset?.snapshot_timestamp ?? "—"} UTC. The score should be used to order investigation, not as a calibrated likelihood.</p></details>` : ""}
+        <div class="cell-intel-flow"><span>Model explanation</span><i class="bi bi-arrow-right"></i><button class="btn btn-sm btn-outline-primary" onclick="setInsightTab('overview')">Review quarterly measurements</button></div>`;
+    content = `<section class="cell-intel-section ai-insight"><div class="cell-section-heading"><div><div class="cell-title-row"><span class="cell-intel-kicker">EXPLAIN</span><span class="cheat-badge ai">QUARTERLY AI</span></div><h4>${noQuarterlyExplanation ? "Quarterly AI explanation" : "Why the model flagged this cell"}</h4></div></div>${explainContext}${state.finalsActualRevealed && heldOutResult ? `<div class="cell-validation-result compact"><span>Held-out ${state.finals.metadata.forecast_quarter} result</span><b>${timeMachineLabel(heldOutResult)}</b></div>` : ""}${explanationBody}<button class="cell-secondary-link" onclick="setWorkspaceTool('ai')">Open full quarterly forecast</button></section>`;
   } else if (state.insightTab === "cause") {
     const causeEvidenceItems = [
       evidence("QoE", metrics.qoe != null ? `${metrics.qoe.toFixed(1)} / 100` : null, metricTone("qoe", metrics.qoe)),
