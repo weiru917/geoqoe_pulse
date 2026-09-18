@@ -379,7 +379,10 @@ to exactly 59.98%, matching `feature_dictionary.xlsx`).
   plus independent top-quartile scenario investigation signals. Scenario
   measurement support is shown separately from possible-driver signals.
 - **Prioritise:** a future-risk shortlist by default, with observed issues
-  available as a secondary view and workflow tracking kept in the browser.
+  available as a secondary view. A transparent prototype triage layer recommends
+  Investigate now, Verify first, or Monitor without changing AI ranks. Users can
+  save a browser-local investigation case, record human verification outcomes,
+  and hand off a copy, JSON file, or print/PDF evidence brief.
 - **Scenario Lab and Time-Series Analytics:** the 168-hour demonstration
   timeline, profile/lens controls and detailed hourly trend exploration.
 - **Data & Trust:** provenance, REAL / AI MODEL / DEMO / SCENARIO / HEURISTIC
@@ -387,6 +390,11 @@ to exactly 59.98%, matching `feature_dictionary.xlsx`).
 - **Cell Intelligence:** selecting a hexagon synchronises the map and side
   panel, showing observed status, emerging-risk band/rank, real quarterly
   measurements, contributors, measurement support and investigation priority.
+
+The Explain-to-Reveal handoff preserves the selected H3 cell: **Review quarterly
+measurements** opens that cell's Reveal detail, not the general executive overview.
+Saved investigation cases and outcomes are local operational records; they are not
+written into the datasets and do not automatically retrain the quarterly model.
 
 Full technical detail on every dashboard feature (including a "what-if"
 capacity simulator and the AI-vs-traditional hotspot comparison

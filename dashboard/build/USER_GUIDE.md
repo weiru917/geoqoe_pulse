@@ -133,27 +133,24 @@ Select a ranked row to focus its map cell. After using **Reveal Actual**, the qu
 
 ### Explain
 
-Explain is the hourly **DEMO / SCENARIO** investigation-evidence view. It answers: **What supporting signals are worth checking?**
+Explain is the selected-cell quarterly AI evidence view. It answers: **Which measured values and SHAP contributors influenced this cell's relative forecast rank?** It does not diagnose root cause.
 
 It shows:
 
-- degraded scenario-cell count;
-- **Scenario measurement support**: No support, Limited, Moderate, or Stronger, based on confidence;
-- independent signal bars for:
-  - Sparse mapped-tower context;
-  - Elevated relative latency;
-  - Elevated activity-pressure proxy;
-  - Built-environment intensity;
-- the number of degraded cells with no strong relative signal;
-- a concise key takeaway.
+- the selected cell's 2026Q1 observed status and 2026Q2 emerging-risk rank;
+- real quarterly download, upload, latency and measurement support;
+- SHAP contributors that increased or reduced the model's risk assessment;
+- geographic and human-activity context in expandable detail.
 
-Signals use the citywide top quartile for the selected scenario hour. They are relative investigation thresholds, not engineering failure thresholds. Percentages do not need to total 100% because one cell may show multiple signals.
+**Review quarterly measurements** opens the same selected cell in Reveal, rather than returning to the general Reveal overview. Cells that were already underperforming are not forecast-eligible, so Explain directs users to their observed measurements instead of displaying an empty AI explanation.
 
-Click an evidence bar to filter the **Hourly Scenario Queue** to cells carrying that signal. Measurement support is separate from the possible-driver signals.
+Hourly percentile-based investigation signals remain in **Scenario Lab**. They use citywide top-quartile thresholds for the selected scenario hour, can overlap, and are exploratory rather than engineering failure thresholds.
 
 ### Prioritise
 
-Prioritise is the main quarterly workflow. It lets users switch between **Observed issues · 2026Q1** and the **Future risk shortlist · 2026Q2**, then track Active, Investigating, or Resolved status. It is based on real quarterly observations and the frozen finals AI outputs.
+Prioritise is the main quarterly workflow. It lets users switch between **Observed issues · 2026Q1** and the **Future risk shortlist · 2026Q2**. A transparent prototype policy recommends **Investigate now**, **Verify first**, or **Monitor** using current status, AI band, quarterly measurement support and performance history. This recommendation does not alter the frozen AI rank.
+
+Users can create a local **Investigation case** from a priority card. The saved evidence snapshot can be copied, downloaded as JSON, or printed/saved as PDF for handoff. Human reviewers can record workflow/outcome status, evidence source, verification date, next review and notes. These records stay in the current browser and do not automatically retrain or update the model.
 
 ### Hourly Scenario Queue
 

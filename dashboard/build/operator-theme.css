@@ -280,6 +280,133 @@ body.app-page-command #analysisStage > .workspace-analysis-panel { background:va
 .cell-explain-unavailable > i { margin-top:2px; color:var(--op-accent); font-size:15px; }
 .cell-explain-unavailable b { color:var(--op-text); font-size:13px; font-weight:700; }
 .cell-explain-unavailable p { margin:4px 0 10px; color:var(--op-secondary); font-size:12px; line-height:1.45; }
+
+/* Quarterly prioritisation, handoff and human outcome tracking */
+.quarterly-triage-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:12px 0 6px; padding:10px 12px; border:1px solid var(--op-border); border-radius:var(--ui-radius); background:var(--op-subtle); }
+.quarterly-triage-toolbar > span { color:var(--op-secondary); font-size:11px; font-weight:700; }
+.quarterly-triage-toolbar > div { display:flex; flex-wrap:wrap; gap:6px; }
+.quarterly-triage-toolbar button { min-height:30px; padding:5px 9px; color:var(--op-secondary); font-size:11px; font-weight:600; border:1px solid var(--op-control-border); border-radius:var(--ui-control-radius); background:var(--op-control-bg); }
+.quarterly-triage-toolbar button:hover { color:var(--op-accent); border-color:var(--op-accent); background:var(--op-control-hover); }
+.quarterly-triage-toolbar button.active { color:var(--op-control-active-text); border-color:var(--op-control-active); background:var(--op-control-active); }
+.quarterly-triage-toolbar button b { display:inline-flex; align-items:center; justify-content:center; min-width:19px; margin-left:4px; padding:1px 5px; border-radius:9px; color:inherit; background:color-mix(in srgb,currentColor 12%,transparent); }
+.triage-scope-note { display:flex; gap:6px; margin:0 2px 12px; color:var(--op-muted); font-size:11px; line-height:1.4; }
+.triage-recommendation { margin:10px 0 8px; padding:10px 12px; border:1px solid var(--op-border); border-left:3px solid var(--op-accent); border-radius:var(--ui-radius); background:var(--op-subtle); }
+.triage-recommendation > div { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.triage-recommendation > div span { color:var(--op-muted); font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.triage-recommendation > div b { color:var(--op-text); font-size:13px; }
+.triage-recommendation p { margin:4px 0; color:var(--op-secondary); font-size:12px; line-height:1.4; }
+.triage-recommendation small { color:var(--op-secondary); font-size:11px; line-height:1.4; }
+.triage-investigate_now { border-left-color:var(--op-danger); background:var(--op-danger-bg); }
+.triage-investigate_now > div b { color:var(--op-danger); }
+.triage-verify_first { border-left-color:var(--op-warning); background:var(--op-warning-bg); }
+.triage-verify_first > div b { color:var(--op-warning); }
+.triage-monitor { border-left-color:var(--ui-context); }
+.triage-monitor > div b { color:var(--ui-context); }
+.triage-policy { margin:6px 0 8px; }
+.triage-policy > summary { min-height:30px!important; padding:6px 9px!important; font-size:11px!important; }
+.triage-policy > p { margin:7px 10px; color:var(--op-secondary); font-size:11px; line-height:1.45; }
+.quarterly-handoff { display:flex; align-items:center; gap:9px; margin-top:8px; }
+.quarterly-handoff .btn { display:inline-flex; align-items:center; gap:5px; min-height:32px; }
+.quarterly-handoff small { color:var(--op-muted); font-size:10.5px; }
+.investigation-case { margin-top:9px; border:1px solid var(--op-border); border-radius:var(--ui-radius); overflow:hidden; }
+.investigation-case > summary { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:36px!important; padding:8px 10px!important; }
+.investigation-case > summary span { font-size:12px; font-weight:700; }
+.investigation-case > summary b { color:var(--op-accent); font-size:11px; }
+.investigation-case-body { padding:10px; border-top:1px solid var(--op-border); background:var(--op-surface); }
+.case-snapshot-note { display:flex; gap:7px; margin-bottom:10px; padding:8px; color:var(--op-secondary); font-size:11px; line-height:1.4; border-radius:6px; background:var(--op-subtle); }
+.case-field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.case-field-grid label,.case-notes { display:grid; gap:4px; color:var(--op-secondary); font-size:10.5px; font-weight:600; }
+.case-field-grid :is(select,input),.case-notes textarea { width:100%; min-height:34px; padding:6px 8px; color:var(--op-text); font-size:12px; border:1px solid var(--op-control-border); border-radius:var(--ui-control-radius); background:var(--op-control-bg); }
+.case-notes { margin-top:8px; }
+.case-notes textarea { resize:vertical; line-height:1.4; }
+.case-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+.case-actions button { min-height:30px; padding:5px 9px; color:var(--op-accent); font-size:11px; font-weight:600; border:1px solid var(--op-control-border); border-radius:var(--ui-control-radius); background:var(--op-control-bg); }
+.case-actions button:hover { border-color:var(--op-accent); background:var(--op-control-hover); }
+.case-disclaimer { margin:8px 0 0; color:var(--op-muted); font-size:10.5px; line-height:1.4; }
+.queue-empty { display:grid; gap:2px; padding:16px; color:var(--op-secondary); text-align:center; border:1px dashed var(--op-control-border); border-radius:var(--ui-radius); background:var(--op-subtle); }
+.queue-empty span { color:var(--op-muted); font-size:11px; }
+
+/* Decision-first quarterly queue cards */
+.queue-item-head { display:grid; grid-template-columns:34px minmax(0,1fr) auto; align-items:center; gap:9px; }
+.queue-card-rank { display:flex; align-items:center; justify-content:center; width:34px; min-height:30px; padding:4px; color:var(--op-accent); font-size:11px; font-weight:750; font-variant-numeric:tabular-nums; border-radius:7px; background:var(--op-tint); }
+.queue-high .queue-card-rank,.queue-observed .queue-card-rank { color:var(--op-danger); background:var(--op-danger-bg); }
+.queue-elevated .queue-card-rank { color:var(--op-warning); background:var(--op-warning-bg); }
+.queue-card-identity { display:flex; min-width:0; align-items:center; flex-wrap:wrap; gap:5px 8px; }
+.queue-card-identity h3 { flex:1 1 190px; overflow-wrap:anywhere; }
+.queue-card-identity .quarterly-priority-badge { flex:0 0 auto; margin:0; }
+.triage-recommendation { margin:10px 0 0; }
+.quarterly-measurements { margin-top:7px; }
+.quarterly-why { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:8px; align-items:start; margin:8px 1px!important; }
+.quarterly-why > span { color:var(--op-muted); font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.quarterly-why > b { color:var(--op-secondary)!important; font-size:11px; font-weight:500; line-height:1.4; }
+.queue-evidence-detail { margin:6px 0 0!important; border:1px solid var(--op-border)!important; border-radius:6px!important; overflow:hidden; background:var(--op-surface)!important; }
+.queue-evidence-detail > summary { min-height:31px!important; padding:6px 9px!important; color:var(--op-secondary)!important; font-size:11px!important; font-weight:600!important; background:var(--op-subtle)!important; }
+.queue-evidence-detail[open] > summary { color:var(--op-accent)!important; border-bottom:1px solid var(--op-border); }
+.queue-evidence-detail .queue-facts { margin:8px; }
+.queue-rule-note { display:grid; gap:3px; margin:0 8px 8px; padding:8px 9px; border-radius:6px; background:var(--op-subtle); }
+.queue-rule-note b { color:var(--op-text); font-size:10px; }
+.queue-rule-note span { color:var(--op-secondary); font-size:11px; line-height:1.4; }
+.queue-rule-note small { color:var(--op-muted); font-size:10px; line-height:1.35; }
+.queue-detail-list { display:grid; gap:0; padding:4px 9px; }
+.queue-detail-list > div { display:grid; grid-template-columns:minmax(120px,.7fr) minmax(0,1.3fr); gap:10px; padding:7px 0; border-top:1px solid var(--op-border); }
+.queue-detail-list > div:first-child { border-top:0; }
+.queue-detail-list span { color:var(--op-muted); font-size:10px; font-weight:600; }
+.queue-detail-list b { color:var(--op-secondary); font-size:11px; font-weight:500; line-height:1.4; overflow-wrap:anywhere; }
+.queue-policy-note { margin:0 9px 8px!important; padding:7px 8px; color:var(--op-muted); font-size:10px!important; line-height:1.4; border-radius:5px; background:var(--op-subtle); }
+.quarterly-handoff { justify-content:space-between; padding-top:8px; border-top:1px solid var(--op-border); }
+.quarterly-handoff small { max-width:52%; text-align:right; }
+
+.future-risk-card { padding:10px 11px 9px; }
+.future-risk-card .queue-item-head { grid-template-columns:36px minmax(0,1fr) auto; }
+.future-risk-card .queue-card-rank { width:36px; min-height:32px; color:var(--op-danger); font-size:12px; background:var(--op-danger-bg); }
+.future-risk-card.queue-elevated .queue-card-rank { color:var(--op-warning); background:var(--op-warning-bg); }
+.future-risk-card .queue-card-identity h3 { font-size:14px!important; font-weight:700!important; }
+.future-risk-card .quarterly-priority-badge { padding:3px 6px; font-size:9.5px; }
+.future-risk-card .quarterly-measurements { margin-top:7px; }
+.future-risk-card .quarterly-measurements > span { padding:6px 9px; }
+.future-risk-card .quarterly-measurements b { font-size:12px; }
+.quarterly-measurements .metric-critical b { color:var(--op-danger); }
+.quarterly-measurements .metric-watch b { color:var(--op-warning); }
+.quarterly-measurements .metric-strong b { color:var(--op-good); }
+.future-risk-card .triage-recommendation { display:grid; grid-template-columns:minmax(145px,.75fr) minmax(0,1fr); gap:3px 12px; margin-top:7px; padding:7px 9px; border-width:1px 1px 1px 3px; }
+.future-risk-card .triage-pathway { display:grid; align-content:start; justify-content:start; gap:2px; }
+.future-risk-card .triage-pathway b { font-size:12px; }
+.future-risk-card .triage-summary-lines { display:grid; grid-template-columns:70px minmax(0,1fr); align-content:start; gap:4px 8px; }
+.future-risk-card .triage-summary-lines span { color:var(--op-muted); font-size:9px; font-weight:700; letter-spacing:.035em; line-height:1.35; text-transform:uppercase; }
+.future-risk-card .triage-summary-lines b { color:var(--op-secondary); font-size:10.5px; font-weight:500; line-height:1.35; }
+.future-risk-card .quarterly-why { margin:6px 1px!important; }
+.future-risk-card .queue-evidence-detail { margin-top:4px!important; }
+.future-risk-card .quarterly-handoff { margin-top:5px; padding-top:6px; }
+.investigation-case.compact-case { margin-top:5px; border:0; border-top:1px solid var(--op-border); border-radius:0; }
+.investigation-case.compact-case > summary { display:grid; grid-template-columns:minmax(0,1fr) minmax(145px,auto) auto; gap:8px 14px; align-items:center; min-height:38px!important; padding:7px 2px!important; color:var(--op-secondary)!important; background:transparent!important; list-style:none!important; }
+.investigation-case.compact-case > summary::-webkit-details-marker,.investigation-case.compact-case > summary::marker { display:none; content:""; }
+.investigation-case.compact-case > summary::before,.investigation-case.compact-case > summary::after { display:none!important; content:none!important; }
+.compact-case > summary > span { display:flex; min-width:0; align-items:center; gap:6px; font-size:10.5px!important; font-weight:500!important; }
+.compact-case > summary > span:first-child b { color:var(--op-text); font-size:11px; }
+.compact-case > summary > span:first-child em { color:var(--op-muted); font-size:10px; font-style:normal; }
+.compact-case > summary > span:nth-child(2) { display:grid; grid-template-columns:auto auto; justify-content:start; }
+.compact-case > summary > span:nth-child(2) b { color:var(--op-secondary); font-size:10.5px; }
+.compact-case > summary > span:nth-child(2) small { grid-column:1 / -1; color:var(--op-muted); font-size:9.5px; }
+.compact-case > summary > strong { justify-self:end; color:var(--op-accent); font-size:10.5px; font-weight:650; white-space:nowrap; }
+.compact-case[open] > summary > strong { color:var(--op-secondary); }
+.compact-case[open] > summary > strong::after { content:" · Close"; }
+@media(max-width:640px) {
+  .quarterly-triage-toolbar { align-items:flex-start; flex-direction:column; }
+  .quarterly-triage-toolbar > div { width:100%; }
+  .quarterly-handoff { align-items:flex-start; flex-direction:column; }
+  .case-field-grid { grid-template-columns:1fr; }
+  .queue-item-head { grid-template-columns:32px minmax(0,1fr); }
+  .queue-item-head .btn { grid-column:2; justify-self:start; margin-top:1px!important; }
+  .quarterly-why { grid-template-columns:1fr; gap:2px; }
+  .quarterly-handoff small { max-width:none; text-align:left; }
+  .future-risk-card .queue-item-head { grid-template-columns:34px minmax(0,1fr); }
+  .future-risk-card .triage-recommendation { grid-template-columns:1fr; }
+  .future-risk-card .triage-summary-lines { grid-template-columns:64px minmax(0,1fr); }
+  .investigation-case.compact-case > summary { grid-template-columns:1fr auto; }
+  .compact-case > summary > span:nth-child(2) { grid-column:1; }
+  .compact-case > summary > strong { grid-column:2; grid-row:1 / span 2; }
+  .queue-detail-list > div { grid-template-columns:1fr; gap:2px; }
+}
 .cell-validation-result.compact { margin:0 0 8px; padding:7px 10px; }
 .ai-insight .cell-ai-hero { grid-template-columns:96px minmax(0,1fr); align-items:center; gap:14px; margin:12px 0 10px; padding:16px 18px; border:1px solid var(--op-border); border-radius:10px; background:linear-gradient(135deg,var(--op-tint),var(--op-subtle)); box-shadow:none; }
 .ai-insight .cell-ai-hero strong { grid-row:1 / span 2; color:var(--op-accent); font-size:36px; font-weight:800; line-height:1; letter-spacing:0; }

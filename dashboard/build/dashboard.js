@@ -48,6 +48,7 @@ const state = {
   interventionStatusFilter: "all",
   interventionEvidenceFilter: "all",
   quarterlyPriorityView: "future",
+  quarterlyTriageFilter: "all",
   quarterlyMapView: "combined",
   aiForecastBandFilter: "high",
   aiForecastExpanded: false,
@@ -57,6 +58,7 @@ const state = {
   compareMode: false,
   compareCells: [],         // array of h3_index, max COMPARE_MAX
   tracking: {},             // h3_index -> "planned" | "done", persisted to localStorage
+  investigationCases: {},  // h3_index -> locally stored quarterly investigation handoff
   profile: "balanced",      // QoE weighting profile — see PROFILE_WEIGHTS
   whatIfEnabled: false,
   whatIfPct: 20,            // -50..+100, % capacity change
@@ -77,7 +79,12 @@ const state = {
 };
 const COMPARE_MAX = 5;
 const TRACKING_KEY = "geoqoe_pulse_tracking_v1";
+const INVESTIGATION_CASES_KEY = "geoqoe_pulse_investigation_cases_v1";
 const DARKMODE_KEY = "geoqoe_pulse_darkmode_v1";
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
+}
 
 // Application-specific QoE weighting profiles. "balanced" reproduces the
 // pipeline's real target_qoe_index formula exactly (weights taken from
@@ -179,6 +186,7 @@ async function boot() {
   state.rangeStart = 0;
   state.rangeEnd = panel.num_timestamps - 1;
   loadTracking();
+  loadInvestigationCases();
 
   panel.h3_ids.forEach((h3, i) => state.h3IndexOf.set(h3, i));
   grid.features.forEach(f => state.gridPropsByH3.set(f.properties.h3_index, f.properties));
@@ -563,6 +571,15 @@ function loadTracking() {
 }
 function saveTracking() {
   try { localStorage.setItem(TRACKING_KEY, JSON.stringify(state.tracking)); } catch {}
+}
+function loadInvestigationCases() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(INVESTIGATION_CASES_KEY) || "{}");
+    state.investigationCases = saved && typeof saved === "object" ? saved : {};
+  } catch { state.investigationCases = {}; }
+}
+function saveInvestigationCases() {
+  try { localStorage.setItem(INVESTIGATION_CASES_KEY, JSON.stringify(state.investigationCases)); } catch {}
 }
 
 // ---------------------------------------------------------------------
@@ -1216,6 +1233,13 @@ function syncActiveToolSelection() {
   if (c == null) return;
   const active = document.querySelector(".workspace-analysis-panel[style*='display: block'], .workspace-analysis-panel[style*='display:block']");
   if (!active || active.id === "workspaceOverviewPanel") return;
+  // Explain already renders the selected cell's identity inside Cell Intelligence,
+  // while Prioritise identifies every cell in its queue. A second page-level strip
+  // repeats the same location/status and adds no decision value in either view.
+  if (["selectedAreaPanel", "quarterlyPriorityPanel"].includes(active.id)) {
+    active.querySelector(".active-selection-context")?.remove();
+    return;
+  }
   let context = active.querySelector(".active-selection-context");
   if (!context) {
     context = document.createElement("div");
@@ -2590,7 +2614,212 @@ function renderExecOverview() {
 
 function setQuarterlyPriorityView(view) {
   state.quarterlyPriorityView = view === "future" ? "future" : "current";
+  state.quarterlyTriageFilter = "all";
   renderQuarterlyQueue();
+}
+
+function quarterlySupportLevel(support, tests) {
+  const normalized = String(support || "").toLowerCase();
+  if (["limited", "typical", "strong"].includes(normalized)) return normalized;
+  if (tests == null) return "limited";
+  if (Number(tests) >= 150) return "strong";
+  if (Number(tests) >= 20) return "typical";
+  return "limited";
+}
+
+// Transparent prototype policy: AI ranking and observed status remain unchanged.
+// This layer only recommends the next human review pathway using existing
+// quarterly evidence. It is configurable and not an industry-validated rule.
+function quarterlyTriageRecommendation(row, observed = false) {
+  const support = quarterlySupportLevel(row.support, row.tests);
+  const recurrence = Number(row.historyRate ?? 0);
+  if (observed) {
+    if (support === "limited") return {
+      key: "verify_first", label: "Verify first",
+      reason: "The issue is observed, but quarterly measurement support is limited.",
+      next: "Collect recent operator KPI or field measurements before escalation.",
+      rule: "Observed issue + limited support",
+    };
+    return {
+      key: "investigate_now", label: "Investigate now",
+      reason: `Observed underperformance has ${support} quarterly measurement support.`,
+      next: "Begin operator or field validation of the current underperformance.",
+      rule: "Observed issue + typical/strong support",
+    };
+  }
+  if (row.tier === "high" && support !== "limited") return {
+    key: "investigate_now", label: "Investigate now",
+    reason: `High AI priority is supported by ${support} quarterly measurement coverage.`,
+    next: "Review the quarterly measurements and model contributors, then begin targeted validation.",
+    rule: "High risk + typical/strong support",
+  };
+  if (row.tier === "elevated" && support === "strong" && recurrence >= 0.5) return {
+    key: "investigate_now", label: "Investigate now",
+    reason: "Elevated AI priority is supported by strong measurements and recurring historical underperformance.",
+    next: "Review recurring performance history and begin targeted operator validation.",
+    rule: "Elevated risk + strong support + ≥50% historical recurrence",
+  };
+  if (["high", "elevated"].includes(row.tier)) return {
+    key: "verify_first", label: "Verify first",
+    reason: `${row.tier === "high" ? "High" : "Elevated"} AI priority needs additional measurement verification${support === "limited" ? " because support is limited" : " before escalation"}.`,
+    next: "Collect additional quarterly, operator KPI or field evidence before escalation.",
+    rule: `${row.tier === "high" ? "High" : "Elevated"} risk without sufficient corroboration`,
+  };
+  return {
+    key: "monitor", label: "Monitor",
+    reason: "The cell is outside the High and Elevated immediate-review bands.",
+    next: "Continue routine quarterly monitoring and review if measurements deteriorate.",
+    rule: "Lower risk / routine review",
+  };
+}
+
+function quarterlyRecordForH3(h3) {
+  const c = state.h3IndexOf.get(h3);
+  if (c == null) return null;
+  return {
+    h3, c,
+    rank: onsetValue("onset_risk_rank", c),
+    status: onsetValue("current_status", c),
+    tier: onsetValue("onset_priority_tier", c),
+    dlPercentile: onsetValue("dl_percentile_in_quarter", c),
+    dl: onsetValue("ookla_dl_mbps", c),
+    ul: onsetValue("ookla_ul_mbps", c),
+    rtt: onsetValue("ookla_rtt_ms", c),
+    population: onsetValue("population_day", c),
+    support: onsetValue("measurement_support", c),
+    tests: onsetValue("ookla_tests", c),
+    historyRate: onsetValue("below_area_norm_rate_to_date", c),
+    recentDl: onsetValue("rolling_mean_4q_dl", c),
+    previousDl: onsetValue("lag_1q_dl", c),
+    driver: onsetValue("risk_driver_1_label", c),
+  };
+}
+
+function setQuarterlyTriageFilter(value) {
+  state.quarterlyTriageFilter = ["all", "investigate_now", "verify_first", "monitor"].includes(value) ? value : "all";
+  renderQuarterlyQueue();
+}
+
+function createInvestigationCase(h3) {
+  const row = quarterlyRecordForH3(h3);
+  if (!row) return;
+  const observed = row.status === "currently_underperforming";
+  const triage = quarterlyTriageRecommendation(row, observed);
+  const c = row.c;
+  const contributors = [1, 2, 3].map(n => ({
+    label: onsetValue(`risk_driver_${n}_label`, c),
+    value: onsetValue(`risk_driver_${n}_value`, c),
+    family: onsetValue(`risk_driver_${n}_family`, c),
+  })).filter(item => item.label);
+  const protective = [1, 2].map(n => ({
+    label: onsetValue(`protective_${n}_label`, c),
+    value: onsetValue(`protective_${n}_value`, c),
+    family: onsetValue(`protective_${n}_family`, c),
+  })).filter(item => item.label);
+  const now = new Date().toISOString();
+  state.investigationCases[h3] = {
+    schemaVersion: 1,
+    caseId: `GQP-${Date.now().toString(36).toUpperCase()}`,
+    h3,
+    location: cellName(h3),
+    createdAt: now,
+    snapshotAt: now,
+    modelVersion: state.finals?.metadata?.model_version ?? "—",
+    observedQuarter: state.finals?.metadata?.predictor_quarter ?? "2026Q1",
+    forecastQuarter: state.finals?.metadata?.forecast_quarter ?? "2026Q2",
+    observedStatus: observed ? "Underperforming" : row.status === "currently_not_underperforming" ? "Not underperforming" : "Not measured",
+    riskBand: row.rank != null ? (ONSET_TIER_LABELS[row.tier] ?? row.tier) : "Not forecast-eligible",
+    riskRank: row.rank == null ? null : Math.round(row.rank),
+    triage,
+    measurements: { downloadMbps: row.dl, uploadMbps: row.ul, latencyMs: row.rtt, downloadPercentile: row.dlPercentile },
+    measurementSupport: quarterlySupportLevel(row.support, row.tests),
+    ooklaTests: row.tests,
+    performanceHistory: { underperformanceRate: row.historyRate, fourQuarterAverageDownloadMbps: row.recentDl, previousQuarterDownloadMbps: row.previousDl },
+    contributors,
+    protectiveContributors: protective,
+    context: {
+      populationDay: row.population,
+      populationDensityPerKm2: onsetValue("population_density_per_km2", c),
+      towerDensityPerKm2: onsetValue("tower_density_per_km2", c),
+      builtUpRatio: onsetValue("built_up_ratio", c),
+      viirsHumanActivityProxy: onsetValue("viirs_rad_quarter", c),
+    },
+    workflowStatus: "open",
+    verificationDate: "",
+    evidenceSource: "",
+    nextReviewDate: "",
+    notes: "",
+    updatedAt: now,
+    disclaimer: "Prototype operational handoff. Triage is rule-derived and configurable; model contributors do not establish engineering cause.",
+  };
+  saveInvestigationCases();
+  renderQuarterlyQueue();
+}
+
+function updateInvestigationCase(h3, field, value) {
+  const record = state.investigationCases[h3];
+  if (!record || !["workflowStatus", "verificationDate", "evidenceSource", "nextReviewDate", "notes"].includes(field)) return;
+  record[field] = value;
+  record.updatedAt = new Date().toISOString();
+  if (field === "workflowStatus") {
+    if (value === "investigating") state.tracking[h3] = "investigating";
+    else if (value === "resolved") state.tracking[h3] = "done";
+    else delete state.tracking[h3];
+    saveTracking();
+  }
+  saveInvestigationCases();
+  if (field !== "notes") renderQuarterlyQueue();
+}
+
+function investigationBriefText(record) {
+  const fmt = (value, unit = "") => value == null ? "Not available" : `${Number(value).toFixed(1)}${unit}`;
+  const contributors = record.contributors?.length ? record.contributors.map(item => `- ${item.label}: ${formatModelObservedValue(item.label, item.value)}`).join("\n") : "- None available";
+  return `GeoQoE Pulse Investigation Brief\nCase: ${record.caseId}\nLocation: ${record.location}\nH3 cell: ${record.h3}\nCreated: ${record.createdAt}\n\nQuarterly context\nObserved ${record.observedQuarter}: ${record.observedStatus}\nForecast ${record.forecastQuarter}: ${record.riskBand}${record.riskRank != null ? ` · rank #${record.riskRank}` : ""}\nSystem triage: ${record.triage.label}\nReason: ${record.triage.reason}\nSuggested next step: ${record.triage.next}\n\nQuarterly measurements\nDownload: ${fmt(record.measurements.downloadMbps, " Mbps")}\nUpload: ${fmt(record.measurements.uploadMbps, " Mbps")}\nLatency: ${fmt(record.measurements.latencyMs, " ms")}\nMeasurement support: ${record.measurementSupport}${record.ooklaTests != null ? ` · ${record.ooklaTests} Ookla tests` : ""}\n\nModel contributors\n${contributors}\n\nHuman verification\nStatus: ${record.workflowStatus}\nEvidence source: ${record.evidenceSource || "Not recorded"}\nVerification date: ${record.verificationDate || "Not recorded"}\nNext review: ${record.nextReviewDate || "Not recorded"}\nNotes: ${record.notes || "None"}\n\nModel version: ${record.modelVersion}\n${record.disclaimer}`;
+}
+
+async function copyInvestigationBrief(h3) {
+  const record = state.investigationCases[h3];
+  if (!record) return;
+  const text = investigationBriefText(record);
+  try {
+    await navigator.clipboard.writeText(text);
+    window.alert("Investigation brief copied to the clipboard.");
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text; document.body.appendChild(area); area.select(); document.execCommand("copy"); area.remove();
+    window.alert("Investigation brief copied to the clipboard.");
+  }
+}
+
+function downloadInvestigationCase(h3) {
+  const record = state.investigationCases[h3];
+  if (!record) return;
+  const blob = new Blob([JSON.stringify(record, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url; link.download = `${record.caseId}-${h3}.json`; link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function printInvestigationBrief(h3) {
+  const record = state.investigationCases[h3];
+  if (!record) return;
+  const popup = window.open("", "_blank", "noopener,noreferrer");
+  if (!popup) { window.alert("Allow pop-ups to print the investigation brief."); return; }
+  const body = escapeHtml(investigationBriefText(record)).replace(/\n/g, "<br>");
+  popup.document.write(`<!doctype html><html><head><title>${escapeHtml(record.caseId)} · GeoQoE Pulse</title><style>body{font:14px/1.55 Arial,sans-serif;max-width:820px;margin:36px auto;padding:0 24px;color:#261c33}h1{color:#68469a}button{margin-top:20px;padding:8px 14px}@media print{button{display:none}}</style></head><body><h1>GeoQoE Pulse Investigation Brief</h1><div>${body}</div><button onclick="window.print()">Print / Save as PDF</button></body></html>`);
+  popup.document.close();
+}
+
+function renderInvestigationCase(record, compact = false) {
+  if (!record) return "";
+  const statusOptions = [["open","Open"],["investigating","Investigating"],["confirmed_issue","Confirmed issue"],["not_confirmed","Not confirmed"],["insufficient_evidence","Insufficient evidence"],["monitoring","Monitoring"],["resolved","Resolved"]];
+  const evidenceOptions = ["","Operator KPI","Field measurement","Drive test","Customer complaint","Network alarm","Additional Ookla measurement","Desktop review","Other"];
+  const statusLabel = escapeHtml(statusOptions.find(item => item[0] === record.workflowStatus)?.[1] || record.workflowStatus);
+  const summary = compact
+    ? `<summary><span><b>Investigation case</b><em>${escapeHtml(record.caseId)}</em></span><span>Status: <b>${statusLabel}</b><small>Evidence snapshot saved</small></span><strong>View case</strong></summary>`
+    : `<summary><span>Investigation case</span><b>${escapeHtml(record.caseId)} · ${statusLabel}</b></summary>`;
+  return `<details class="investigation-case ${compact ? "compact-case" : ""}">${summary}<div class="investigation-case-body"><div class="case-snapshot-note"><i class="bi bi-camera"></i><span>Evidence snapshot created ${escapeHtml(new Date(record.createdAt).toLocaleString())}. Later model updates do not alter this saved brief.</span></div><div class="case-field-grid"><label><span>Outcome / workflow status</span><select onchange="updateInvestigationCase('${record.h3}','workflowStatus',this.value)">${statusOptions.map(([value,label]) => `<option value="${value}" ${record.workflowStatus === value ? "selected" : ""}>${label}</option>`).join("")}</select></label><label><span>Evidence source</span><select onchange="updateInvestigationCase('${record.h3}','evidenceSource',this.value)">${evidenceOptions.map(value => `<option value="${escapeHtml(value)}" ${record.evidenceSource === value ? "selected" : ""}>${escapeHtml(value || "Not recorded")}</option>`).join("")}</select></label><label><span>Verification date</span><input type="date" value="${escapeHtml(record.verificationDate)}" onchange="updateInvestigationCase('${record.h3}','verificationDate',this.value)"></label><label><span>Next review date</span><input type="date" value="${escapeHtml(record.nextReviewDate)}" onchange="updateInvestigationCase('${record.h3}','nextReviewDate',this.value)"></label></div><label class="case-notes"><span>Reviewer notes</span><textarea rows="3" placeholder="Record operator or field findings…" onchange="updateInvestigationCase('${record.h3}','notes',this.value)">${escapeHtml(record.notes)}</textarea></label><div class="case-actions"><button onclick="copyInvestigationBrief('${record.h3}')"><i class="bi bi-clipboard"></i> Copy summary</button><button onclick="downloadInvestigationCase('${record.h3}')"><i class="bi bi-download"></i> JSON</button><button onclick="printInvestigationBrief('${record.h3}')"><i class="bi bi-printer"></i> Print / PDF</button></div><p class="case-disclaimer">Human-entered outcomes are stored locally and do not automatically retrain or update the model.</p></div></details>`;
 }
 
 function renderQuarterlyQueue() {
@@ -2606,6 +2835,7 @@ function renderQuarterlyQueue() {
     population: onsetValue("population_day", c),
     support: onsetValue("measurement_support", c),
     tests: onsetValue("ookla_tests", c),
+    historyRate: onsetValue("below_area_norm_rate_to_date", c),
     driver: onsetValue("risk_driver_1_label", c)
   }));
   const issues = rows.filter(r => r.status === "currently_underperforming").sort((a, b) =>
@@ -2616,43 +2846,65 @@ function renderQuarterlyQueue() {
   const highCount = forecast.filter(r => r.tier === "high").length;
   const elevatedCount = forecast.filter(r => r.tier === "elevated").length;
   const view = state.quarterlyPriorityView === "current" ? "current" : "future";
-  const workflowLabel = h3 => state.tracking[h3] === "done" ? "Resolved" : state.tracking[h3] === "investigating" ? "Investigating" : "Active";
   const fmt = (value, unit, decimals = 1) => value == null ? "Not available" : `${Number(value).toFixed(decimals)}${unit ? ` ${unit}` : ""}`;
+  const metricTone = (kind, value) => {
+    if (value == null) return "metric-unknown";
+    if (kind === "download") return value < 25 ? "metric-critical" : value < 100 ? "metric-watch" : "metric-strong";
+    if (kind === "upload") return value < 5 ? "metric-critical" : value < 20 ? "metric-watch" : "metric-strong";
+    if (kind === "latency") return value > 75 ? "metric-critical" : value > 30 ? "metric-watch" : "metric-strong";
+    return "metric-unknown";
+  };
   const card = (r, observed) => {
     const tier = observed ? "observed" : (r.tier || "lower");
-    const priority = observed ? "P1 · Observed issue · 2026Q1" : tier === "high" ? "P1 · High AI risk" : "P2 · Elevated AI risk";
+    const priority = observed ? "P1 · Observed issue · 2026Q1" : tier === "high" ? "High AI risk" : "Elevated AI risk";
     const evidence = observed ? "Observed quarterly underperformance" : (r.driver || "Review the model contributors");
     const why = observed
       ? `Already underperforming in ${state.finals.metadata.predictor_quarter}${r.dlPercentile != null ? `; download is at the ${Number(r.dlPercentile).toFixed(1)} percentile` : ""}.`
-      : `${ONSET_TIER_LABELS[tier] ?? "Emerging risk"}, rank #${Math.round(r.rank)} among currently-normal evaluable forecast cells.`;
-    const next = observed
-      ? "Validate current download, upload and latency with recent local or operator measurements."
-      : `Review ${r.driver ? `the ${r.driver} contribution` : "the model contributors"} and quarterly measurement support before field investigation.`;
-    const tracking = state.tracking[r.h3] || "";
-    return `<article class="quarterly-queue-item queue-${tier}">
-      <div class="queue-item-head"><div><span class="quarterly-priority-badge">${priority}</span><h3>${cellName(r.h3)}</h3><p><b>${evidence}</b></p></div><button class="btn btn-sm btn-outline-primary" onclick="flyToCell('${r.h3}'); setInsightTab('${observed ? "overview" : "ai"}')">Inspect</button></div>
-      <div class="quarterly-measurements"><span><small>Download</small><b>${fmt(r.dl, "Mbps")}</b></span><span><small>Upload</small><b>${fmt(r.ul, "Mbps")}</b></span><span><small>Latency</small><b>${fmt(r.rtt, "ms")}</b></span></div>
-      <div class="queue-facts"><span><small>${observed ? "Evidence state" : "Top model contributor"}</small><b>${evidence}</b></span><span><small>Measurement support</small><b>${r.support ?? "Not reported"}${r.tests != null ? ` · ${Number(r.tests).toLocaleString()} tests` : ""}</b></span><span><small>Potential population context</small><b>${r.population != null ? Math.round(r.population).toLocaleString() : "Not available"}</b></span></div>
-      <p class="quarterly-why"><b>Why prioritised:</b> ${why}</p>
-      <p class="queue-next"><i class="bi bi-arrow-right-circle"></i><span><b>Recommended next check:</b> ${next}</span></p>
-      <div class="quarterly-workflow"><label><span>Workflow status</span><select onchange="setTracking('${r.h3}', this.value || null)"><option value="" ${tracking === "" ? "selected" : ""}>Active</option><option value="investigating" ${tracking === "investigating" ? "selected" : ""}>Investigating</option><option value="done" ${tracking === "done" ? "selected" : ""}>Resolved</option></select></label><small>${workflowLabel(r.h3)} · saved locally in this browser</small></div>
+      : `${ONSET_TIER_LABELS[tier] ?? "Emerging risk"} · rank #${Math.round(r.rank)} among evaluable currently-normal cells.`;
+    const triage = quarterlyTriageRecommendation(r, observed);
+    const savedCase = state.investigationCases[r.h3];
+    const queueMarker = observed ? "OBS" : `#${Math.round(r.rank)}`;
+    const conciseReason = triage.key === "verify_first" && quarterlySupportLevel(r.support, r.tests) === "limited"
+      ? "Limited quarterly measurement support"
+      : triage.reason;
+    const supportingEvidence = `Quarterly download ${fmt(r.dl, "Mbps")}, upload ${fmt(r.ul, "Mbps")} and latency ${fmt(r.rtt, "ms")}.`;
+    return `<article class="quarterly-queue-item queue-${tier} ${observed ? "" : "future-risk-card"}">
+      <div class="queue-item-head"><span class="queue-card-rank">${queueMarker}</span><div class="queue-card-identity"><h3>${cellName(r.h3)}</h3><span class="quarterly-priority-badge">${priority}</span></div><button class="btn btn-sm btn-outline-primary" onclick="flyToCell('${r.h3}'); setInsightTab('${observed ? "overview" : "ai"}')">Inspect cell</button></div>
+      <div class="quarterly-measurements"><span class="${metricTone("download", r.dl)}"><small>Download</small><b>${fmt(r.dl, "Mbps")}</b></span><span class="${metricTone("upload", r.ul)}"><small>Upload</small><b>${fmt(r.ul, "Mbps")}</b></span><span class="${metricTone("latency", r.rtt)}"><small>Latency</small><b>${fmt(r.rtt, "ms")}</b></span></div>
+      <section class="triage-recommendation triage-${triage.key}"><div class="triage-pathway"><span>Recommended pathway</span><b>${triage.label}</b></div><div class="triage-summary-lines"><span>Reason</span><b>${conciseReason}</b><span>Next check</span><b>${triage.next}</b></div></section>
+      <p class="quarterly-why"><span>Why prioritised</span><b>${why}</b></p>
+      <details class="queue-evidence-detail"><summary>Evidence &amp; recommendation details</summary><div class="queue-detail-list"><div><span>${observed ? "Evidence state" : "Top model contributor"}</span><b>${evidence}</b></div><div><span>Quarterly measurement support</span><b>${r.support ?? "Not reported"}${r.tests != null ? ` · ${Number(r.tests).toLocaleString()} tests` : ""}</b></div><div><span>Population context</span><b>${r.population != null ? Math.round(r.population).toLocaleString() : "Not available"}</b></div><div><span>Supporting evidence</span><b>${supportingEvidence}</b></div><div><span>Recommendation rationale</span><b>${triage.rule}</b></div></div><p class="queue-policy-note">Relative prioritisation and transparent triage guidance; neither establishes an engineering cause or changes the AI rank.</p></details>
+      ${savedCase ? renderInvestigationCase(savedCase, !observed) : `<div class="quarterly-handoff"><button class="btn btn-sm btn-outline-primary" onclick="createInvestigationCase('${r.h3}')"><i class="bi bi-file-earmark-plus"></i>Create investigation case</button><small>Save an evidence snapshot for handoff and outcome tracking</small></div>`}
     </article>`;
   };
   const switcher = `<div class="quarterly-view-toggle" role="group" aria-label="Choose investigation queue">
     <button type="button" class="future ${view === "future" ? "active" : ""}" aria-pressed="${view === "future"}" onclick="setQuarterlyPriorityView('future')"><span>Future risk shortlist</span><b>${forecast.length.toLocaleString()}</b></button>
     <button type="button" class="current ${view === "current" ? "active" : ""}" aria-pressed="${view === "current"}" onclick="setQuarterlyPriorityView('current')"><span>Observed issues · 2026Q1</span><b>${issues.length.toLocaleString()}</b></button>
   </div>`;
+  const sourceRows = view === "current" ? issues : forecast;
+  const triageCounts = { investigate_now: 0, verify_first: 0, monitor: 0 };
+  sourceRows.forEach(row => { triageCounts[quarterlyTriageRecommendation(row, view === "current").key]++; });
+  const triageFilters = `<div class="quarterly-triage-toolbar"><span>Recommended pathway</span><div><button class="${state.quarterlyTriageFilter === "all" ? "active" : ""}" onclick="setQuarterlyTriageFilter('all')">All <b>${sourceRows.length}</b></button><button class="triage-investigate ${state.quarterlyTriageFilter === "investigate_now" ? "active" : ""}" onclick="setQuarterlyTriageFilter('investigate_now')">Investigate now <b>${triageCounts.investigate_now}</b></button><button class="triage-verify ${state.quarterlyTriageFilter === "verify_first" ? "active" : ""}" onclick="setQuarterlyTriageFilter('verify_first')">Verify first <b>${triageCounts.verify_first}</b></button><button class="triage-monitor ${state.quarterlyTriageFilter === "monitor" ? "active" : ""}" onclick="setQuarterlyTriageFilter('monitor')">Monitor <b>${triageCounts.monitor}</b></button></div></div><p class="triage-scope-note"><i class="bi bi-info-circle"></i>Triage is a configurable, rule-based prototype layer. AI risk rank remains unchanged.</p>`;
+  const filteredIssues = issues.filter(row => state.quarterlyTriageFilter === "all" || quarterlyTriageRecommendation(row, true).key === state.quarterlyTriageFilter);
+  const filteredForecast = forecast.filter(row => state.quarterlyTriageFilter === "all" || quarterlyTriageRecommendation(row, false).key === state.quarterlyTriageFilter);
   const currentQueue = `<div class="queue-section-heading current"><span>OBSERVED ISSUES · 2026Q1</span><b>Validate existing underperformance first</b></div>
     <p class="panel-hint">Ordered by lowest quarterly download percentile, then population context. These cells are not forecast-ranked.</p>
-    ${issues.slice(0,5).map(r => card(r,true)).join("")}
-    <details class="quarterly-more"><summary>More current issues (next 15)</summary>${issues.slice(5,20).map(r => card(r,true)).join("")}</details>`;
+    ${filteredIssues.length ? filteredIssues.slice(0,5).map(r => card(r,true)).join("") : `<div class="queue-empty"><b>No matching observed issues</b><span>Choose another triage pathway.</span></div>`}
+    ${filteredIssues.length > 5 ? `<details class="quarterly-more"><summary>More current issues (next 15)</summary>${filteredIssues.slice(5,20).map(r => card(r,true)).join("")}</details>` : ""}`;
   const futureQueue = `<div class="queue-section-heading future"><span>FUTURE RISK SHORTLIST</span><b>${highCount.toLocaleString()} High · ${elevatedCount.toLocaleString()} Elevated</b></div>
     <p class="panel-hint">Only High and Elevated AI bands are included here. Use Anticipate to explore the complete ${rows.filter(r => r.rank != null).length.toLocaleString()}-cell forecast ranking.</p>
-    ${forecast.slice(0,5).map(r => card(r,false)).join("")}
-    <details class="quarterly-more"><summary>More future priorities (ranks 6–20)</summary>${forecast.slice(5,20).map(r => card(r,false)).join("")}</details>`;
+    ${filteredForecast.length ? filteredForecast.slice(0,5).map(r => card(r,false)).join("") : `<div class="queue-empty"><b>No matching future-risk cells</b><span>Choose another triage pathway.</span></div>`}
+    ${filteredForecast.length > 5 ? `<details class="quarterly-more"><summary>More future priorities (next 15)</summary>${filteredForecast.slice(5,20).map(r => card(r,false)).join("")}</details>` : ""}`;
   document.getElementById("quarterlyPriorityList").innerHTML = state.finals
-    ? `${switcher}${view === "current" ? currentQueue : futureQueue}`
+    ? `${switcher}${triageFilters}${view === "current" ? currentQueue : futureQueue}`
     : `<p>Quarterly forecast data is unavailable.</p>`;
+}
+
+function openSelectedCellReveal() {
+  if (!state.selectedH3) return;
+  state.insightTab = "overview";
+  renderSelectedAreaInsights();
+  setWorkspaceTool("cell");
 }
 
 function setWorkspaceTool(tool) {
@@ -2673,6 +2925,11 @@ function setWorkspaceTool(tool) {
     }
     state.insightTab = "ai";
     renderSelectedAreaInsights();
+  }
+  if (tool === "overview" && state.selectedH3) {
+    state.insightTab = "overview";
+    renderSelectedAreaInsights();
+    syncWorkspaceSelection();
   }
   if (tool === "prioritise") renderQuarterlyQueue();
   if (tool === "pulse") document.getElementById("hourlyPulsePanel").appendChild(document.querySelector(".workspace-hourly-secondary"));
@@ -3073,17 +3330,17 @@ function renderSelectedAreaInsights() {
     const quarterlyContext = state.finals ? [dataRow("Human-activity proxy (VIIRS)", formatModelObservedValue("Human-activity proxy (VIIRS)", onsetValue("viirs_rad_quarter", c)), "Context proxy; not measured network demand"), dataRow("Population density", onsetValue("population_density_per_km2", c) != null ? `${Number(onsetValue("population_density_per_km2", c)).toLocaleString(undefined, { maximumFractionDigits: 1 })} people/km²` : null), dataRow("Built-up ratio", formatModelObservedValue("Built-up ratio", onsetValue("built_up_ratio", c))), dataRow("Tower density", onsetValue("tower_density_per_km2", c) != null ? `${Number(onsetValue("tower_density_per_km2", c)).toFixed(2)} sites/km²` : null)].join("") : "";
     const explainContext = state.finals
       ? aiRank != null
-        ? `<div class="cell-explain-context risk-${aiTier ?? "unscored"}"><span><i class="bi bi-circle-fill"></i>${quarterlyStatusLabel} · ${state.finals.metadata.predictor_quarter}</span><b>${ONSET_TIER_LABELS[aiTier] ?? aiTier} · rank #${Math.round(aiRank)}</b></div>`
-        : `<div class="cell-explain-context ${quarterlyStatus === "currently_underperforming" ? "is-observed-issue" : "is-unscored"}"><span><i class="bi bi-circle-fill"></i>${quarterlyStatusLabel} · ${state.finals.metadata.predictor_quarter}</span><b>${quarterlyStatus === "currently_underperforming" ? "Observed issue · not forecast-eligible" : "No quarterly AI ranking"}</b></div>`
+        ? `<div class="cell-explain-context risk-${aiTier ?? "unscored"}"><span>Emerging-risk assessment · ${state.finals.metadata.forecast_quarter}</span><b>${ONSET_TIER_LABELS[aiTier] ?? aiTier} · rank #${Math.round(aiRank)}</b></div>`
+        : `<div class="cell-explain-context ${quarterlyStatus === "currently_underperforming" ? "is-observed-issue" : "is-unscored"}"><span>Emerging-risk assessment · ${state.finals.metadata.forecast_quarter}</span><b>${quarterlyStatus === "currently_underperforming" ? "Not forecast-eligible" : "No quarterly AI ranking"}</b></div>`
       : `<div class="cell-explain-context risk-${aiTier ?? "unscored"}"><span>${aiStatus?.replaceAll("_", " ") ?? "Forecast context"}</span><b>${aiRank != null ? `${ONSET_TIER_LABELS[aiTier] ?? aiTier} · rank #${Math.round(aiRank)}` : "Not scored"}</b></div>`;
     const noQuarterlyExplanation = state.finals && aiRank == null;
     const explanationBody = noQuarterlyExplanation
-      ? `<div class="cell-explain-unavailable"><i class="bi bi-info-circle"></i><div><b>No emerging-risk explanation for this cell</b><p>${quarterlyStatus === "currently_underperforming" ? `This cell is already underperforming in ${state.finals.metadata.predictor_quarter}, so it was excluded from the currently-normal population ranked for ${state.finals.metadata.forecast_quarter}.` : "This cell is outside the evaluable quarterly forecast population."}</p><button class="btn btn-sm btn-outline-primary" onclick="setInsightTab('overview')">Review observed status and measurements</button></div></div>`
+      ? `<div class="cell-explain-unavailable"><i class="bi bi-info-circle"></i><div><b>No emerging-risk explanation for this cell</b><p>${quarterlyStatus === "currently_underperforming" ? `This cell is already underperforming in ${state.finals.metadata.predictor_quarter}, so it was excluded from the currently-normal population ranked for ${state.finals.metadata.forecast_quarter}.` : "This cell is outside the evaluable quarterly forecast population."}</p><button class="btn btn-sm btn-outline-primary" onclick="openSelectedCellReveal()">Review observed status and measurements</button></div></div>`
       : `<div class="cell-intel-note"><i class="bi bi-info-circle"></i>${state.finals ? "These factors are contributors to the model's risk assessment. They influenced its ranking and do not establish engineering cause. Risk rank is not an individual probability." : "AI values are a relative rank for prioritisation, not a probability of failure."}</div>
         ${signalRows || qoeEvidence ? `<h5>Risk-assessment contributors</h5><ul class="cell-evidence-list">${signalRows}${qoeEvidence}</ul>${finalsProtective.length ? `<h5>Protective contributors</h5><ul class="cell-evidence-list protective">${finalsProtective.map(finalsProtectiveRow).join("")}</ul>` : ""}${remainingSignalRows ? `<details class="cell-detail-disclosure"><summary>All available model signals</summary><ul class="cell-evidence-list">${remainingSignalRows}</ul></details>` : ""}` : `<p class="text-summary">No cell-level forecast evidence is available for this selected cell.</p>`}
         ${quarterlyContext ? `<details class="cell-detail-disclosure"><summary>Geographic and activity context</summary><div class="cell-data-group">${quarterlyContext}</div></details>` : ""}
         ${!state.finals && aiScore != null ? `<details><summary>Model scoring detail</summary><p>Relative score: <b>${aiScore.toFixed(2)}</b>. Snapshot: ${state.onset?.snapshot_timestamp ?? "—"} UTC. The score should be used to order investigation, not as a calibrated likelihood.</p></details>` : ""}
-        <div class="cell-intel-flow"><span>Model explanation</span><i class="bi bi-arrow-right"></i><button class="btn btn-sm btn-outline-primary" onclick="setInsightTab('overview')">Review quarterly measurements</button></div>`;
+        <div class="cell-intel-flow"><span>Model explanation</span><i class="bi bi-arrow-right"></i><button class="btn btn-sm btn-outline-primary" onclick="openSelectedCellReveal()">Review quarterly measurements</button></div>`;
     content = `<section class="cell-intel-section ai-insight"><div class="cell-section-heading"><div><div class="cell-title-row"><span class="cell-intel-kicker">EXPLAIN</span><span class="cheat-badge ai">QUARTERLY AI</span></div><h4>${noQuarterlyExplanation ? "Quarterly AI explanation" : "Why the model flagged this cell"}</h4></div></div>${explainContext}${state.finalsActualRevealed && heldOutResult ? `<div class="cell-validation-result compact"><span>Held-out ${state.finals.metadata.forecast_quarter} result</span><b>${timeMachineLabel(heldOutResult)}</b></div>` : ""}${explanationBody}<button class="cell-secondary-link" onclick="setWorkspaceTool('ai')">Open full quarterly forecast</button></section>`;
   } else if (state.insightTab === "cause") {
     const causeEvidenceItems = [

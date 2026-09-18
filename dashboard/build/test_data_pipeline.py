@@ -220,6 +220,34 @@ class TestFinalsDashboardIntegration(unittest.TestCase):
         self.assertIn("Investigation Evidence", html)
         self.assertIn("DEMO / SCENARIO", html + script)
 
+    def test_quarterly_triage_handoff_and_outcome_tracking_are_present(self):
+        script = (REPO / "dashboard/build/dashboard.js").read_text(encoding="utf-8")
+        for label in ("Investigate now", "Verify first", "Monitor"):
+            self.assertIn(label, script)
+        for function_name in (
+            "quarterlyTriageRecommendation",
+            "createInvestigationCase",
+            "downloadInvestigationCase",
+            "printInvestigationBrief",
+            "updateInvestigationCase",
+        ):
+            self.assertIn(f"function {function_name}", script)
+        for outcome in (
+            "confirmed_issue",
+            "not_confirmed",
+            "insufficient_evidence",
+            "monitoring",
+            "resolved",
+        ):
+            self.assertIn(outcome, script)
+        self.assertIn("do not automatically retrain or update the model", script)
+
+    def test_explain_measurement_handoff_preserves_selected_cell(self):
+        script = (REPO / "dashboard/build/dashboard.js").read_text(encoding="utf-8")
+        self.assertIn("function openSelectedCellReveal()", script)
+        self.assertIn("onclick=\"openSelectedCellReveal()\">Review quarterly measurements", script)
+        self.assertIn('setWorkspaceTool("cell")', script)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
