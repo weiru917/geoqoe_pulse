@@ -57,7 +57,7 @@ report — so judges can inspect the entire pipeline, not just the front end.
 ## 2. How it works, in plain terms
 
 1. **Build the map grid.** The Klang Valley is divided into **4,918**
-   hexagonal cells (H3 grid, resolution 8, ~0.74 km² each, ~461 m edge —
+   hexagonal cells (H3 grid, resolution 8, ~0.86 km² each, ~461 m edge —
    roughly a few city blocks).
 2. **Attach real-world context to every cell.** For each cell: number of
    cell towers, building density, road/POI/transit density, resident and
@@ -66,8 +66,15 @@ report — so judges can inspect the entire pipeline, not just the front end.
    4,918 cells, ~60%**, carry a real Ookla label).
 3. **Score network quality.** A custom 0–100 Quality-of-Experience (QoE)
    index is calculated from download/upload speed, latency, jitter, and
-   packet loss, and cells are flagged as "degraded" against fixed
-   thresholds (download < 10 Mbps or latency > 100 ms).
+   packet loss. Cells are then flagged against two targets: the
+   **primary relative target** (`is_below_area_norm` — bottom 25% of
+   citywide download performance that quarter, prevalence stable at ~22%
+   across all 14 quarters), which is what the finals model forecasts, and
+   a **legacy absolute flag** (download < 10 Mbps or latency > 100 ms),
+   retained for regulatory familiarity. The absolute threshold was
+   superseded because Malaysian speeds rose from ~141 to ~192 Mbps over
+   the study window, shrinking it to ~3% prevalence and falling — see
+   `DATA_METHODOLOGY.md` §4.2.
 4. **Find hotspots.** Real spatial statistics (Getis-Ord Gi\*, Local
    Moran's I) identify statistically significant clusters of poor quality,
    not just individually bad cells.
@@ -181,6 +188,12 @@ written to `data/outputs/`. The identical set is duplicated at
 `Trained AI Model/GeoQoE_AI/data/pipeline_v3_2/` as the frozen snapshot the
 AI models were actually trained against.
 
+> **Datasets download.** The raw and processed datasets are mirrored here:
+> <https://drive.google.com/drive/folders/1EG-etCo-w5oxZ3QlJQFvC-xa1H-_myGX?usp=drive_link>
+> Raw source files are not committed to this repository (see `.gitignore`);
+> every source is re-fetchable from its original publisher via the URLs
+> recorded in `source_manifest.json`.
+
 ### 4.1 Raw open-data sources ingested by the pipeline
 
 | Source | What it provides | Real / not |
@@ -234,8 +247,13 @@ the only intentionally simulated component is the hourly QoE shape (see
 - **Spatial holdout key.** Every output row carries `h3_parent_res6`, a
   coarse parent-cell grouping key used to hold out whole geographic regions
   (not just individual cells) during model validation — this is what makes
-  the AI models' reported accuracy a genuine out-of-region estimate rather
-  than a same-neighbourhood leak.
+  the **legacy static spatial estimator's** reported accuracy a genuine
+  out-of-region estimate rather than a same-neighbourhood leak (§5.1).
+  **The finals quarterly model does not use this key.** Its validation is
+  strictly temporal (train 2023Q1–2025Q4, sealed test 2026Q1 → 2026Q2), so
+  its reported figures are a forward-in-time estimate, not a
+  region-transfer estimate. Adding a spatial holdout is planned work, not a
+  claim this project already makes.
 - **Reproducibility.** One global random seed (`42`), applied once at
   pipeline start.
 
@@ -297,6 +315,15 @@ not the source of the current quarterly forecast screen.
 - **Model:** `full_causal_xgboost` (41 features, frozen best iteration 18,
   frozen validation decision threshold 0.4477), selected by highest
   validation PR-AUC before a single final-test evaluation.
+- > ⚠️ **Read the metrics below as memorisation, not skill.** They were
+  > computed on the hourly panel, which `metadata.json →
+  > panel_structure_disclosure` proves is rank-one: its target is
+  > analytically reconstructable from (cell, hour-of-week) with a maximum
+  > absolute error of 0.0. A ROC-AUC of 0.996 on a lookup table measures
+  > recall of that table, not predictive ability. `HANDOFF.md` §8 lists
+  > "any hourly forecast accuracy" under **Not defensible**. These numbers
+  > are retained only to document what was superseded — **the project's
+  > forecast claim is the quarterly model in §5.0.**
 - **Final-test performance (held-out week):** PR-AUC **0.161**, ROC-AUC
   **0.996**, precision **0.125**, recall **0.990**, F1 **0.223** — the
   model caught 103 of 104 simulated test onsets, at the cost of 718 false
