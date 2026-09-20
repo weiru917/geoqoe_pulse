@@ -2578,7 +2578,7 @@ function renderExecOverview() {
   const priorityEl = document.getElementById("workspaceTopPriority");
   if (priorityEl) {
     priorityEl.innerHTML = topQuarterly
-      ? `<article class="top-priority-action"><div><span>Highest AI-ranked currently-normal cell</span><strong>${cellName(topQuarterly.h3)}</strong><p><b>${ONSET_TIER_LABELS[topQuarterly.tier] ?? topQuarterly.tier}</b> · <em>rank #${Math.round(topQuarterly.rank)}</em></p></div><button onclick="flyToCell('${topQuarterly.h3}')">Inspect cell <i class="bi bi-arrow-right"></i></button></article>`
+      ? `<article class="top-priority-action risk-${topQuarterly.tier ?? "unscored"}"><div><span>Highest AI-ranked currently-normal cell</span><strong>${cellName(topQuarterly.h3)}</strong><p><b>${ONSET_TIER_LABELS[topQuarterly.tier] ?? topQuarterly.tier}</b> · <em>rank #${Math.round(topQuarterly.rank)}</em></p></div><button onclick="flyToCell('${topQuarterly.h3}')">Inspect cell <i class="bi bi-arrow-right"></i></button></article>`
       : `<span class="text-summary">No quarterly forecast candidate is available.</span>`;
   }
   if (window.Plotly && document.getElementById("workspacePulseChart")) {
@@ -2613,7 +2613,7 @@ function renderExecOverview() {
 }
 
 function setQuarterlyPriorityView(view) {
-  state.quarterlyPriorityView = view === "future" ? "future" : "current";
+  state.quarterlyPriorityView = ["future", "current", "cases"].includes(view) ? view : "future";
   state.quarterlyTriageFilter = "all";
   renderQuarterlyQueue();
 }
@@ -2845,7 +2845,11 @@ function renderQuarterlyQueue() {
   const forecast = rows.filter(r => r.rank != null && ["high", "elevated"].includes(r.tier)).sort((a,b) => a.rank - b.rank);
   const highCount = forecast.filter(r => r.tier === "high").length;
   const elevatedCount = forecast.filter(r => r.tier === "elevated").length;
-  const view = state.quarterlyPriorityView === "current" ? "current" : "future";
+  const view = ["current", "cases"].includes(state.quarterlyPriorityView) ? state.quarterlyPriorityView : "future";
+  const investigationCases = Object.values(state.investigationCases || {}).sort((a, b) => {
+    const order = { investigating: 0, open: 1, insufficient_evidence: 2, monitoring: 3, confirmed_issue: 4, not_confirmed: 5, resolved: 6 };
+    return (order[a.workflowStatus] ?? 9) - (order[b.workflowStatus] ?? 9) || String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt));
+  });
   const fmt = (value, unit, decimals = 1) => value == null ? "Not available" : `${Number(value).toFixed(decimals)}${unit ? ` ${unit}` : ""}`;
   const metricTone = (kind, value) => {
     if (value == null) return "metric-unknown";
@@ -2880,8 +2884,9 @@ function renderQuarterlyQueue() {
   const switcher = `<div class="quarterly-view-toggle" role="group" aria-label="Choose investigation queue">
     <button type="button" class="future ${view === "future" ? "active" : ""}" aria-pressed="${view === "future"}" onclick="setQuarterlyPriorityView('future')"><span>Future risk shortlist</span><b>${forecast.length.toLocaleString()}</b></button>
     <button type="button" class="current ${view === "current" ? "active" : ""}" aria-pressed="${view === "current"}" onclick="setQuarterlyPriorityView('current')"><span>Observed issues · 2026Q1</span><b>${issues.length.toLocaleString()}</b></button>
+    <button type="button" class="cases ${view === "cases" ? "active" : ""}" aria-pressed="${view === "cases"}" onclick="setQuarterlyPriorityView('cases')"><span>Investigation cases</span><b>${investigationCases.length.toLocaleString()}</b></button>
   </div>`;
-  const sourceRows = view === "current" ? issues : forecast;
+  const sourceRows = view === "current" ? issues : view === "future" ? forecast : [];
   const triageCounts = { investigate_now: 0, verify_first: 0, monitor: 0 };
   sourceRows.forEach(row => { triageCounts[quarterlyTriageRecommendation(row, view === "current").key]++; });
   const triageFilters = `<div class="quarterly-triage-toolbar"><span>Recommended pathway</span><div><button class="${state.quarterlyTriageFilter === "all" ? "active" : ""}" onclick="setQuarterlyTriageFilter('all')">All <b>${sourceRows.length}</b></button><button class="triage-investigate ${state.quarterlyTriageFilter === "investigate_now" ? "active" : ""}" onclick="setQuarterlyTriageFilter('investigate_now')">Investigate now <b>${triageCounts.investigate_now}</b></button><button class="triage-verify ${state.quarterlyTriageFilter === "verify_first" ? "active" : ""}" onclick="setQuarterlyTriageFilter('verify_first')">Verify first <b>${triageCounts.verify_first}</b></button><button class="triage-monitor ${state.quarterlyTriageFilter === "monitor" ? "active" : ""}" onclick="setQuarterlyTriageFilter('monitor')">Monitor <b>${triageCounts.monitor}</b></button></div></div><p class="triage-scope-note"><i class="bi bi-info-circle"></i>Triage is a configurable, rule-based prototype layer. AI risk rank remains unchanged.</p>`;
@@ -2895,8 +2900,12 @@ function renderQuarterlyQueue() {
     <p class="panel-hint">Only High and Elevated AI bands are included here. Use Anticipate to explore the complete ${rows.filter(r => r.rank != null).length.toLocaleString()}-cell forecast ranking.</p>
     ${filteredForecast.length ? filteredForecast.slice(0,5).map(r => card(r,false)).join("") : `<div class="queue-empty"><b>No matching future-risk cells</b><span>Choose another triage pathway.</span></div>`}
     ${filteredForecast.length > 5 ? `<details class="quarterly-more"><summary>More future priorities (next 15)</summary>${filteredForecast.slice(5,20).map(r => card(r,false)).join("")}</details>` : ""}`;
+  const statusLabel = value => ({ open: "Open", investigating: "Investigating", confirmed_issue: "Confirmed issue", not_confirmed: "Not confirmed", insufficient_evidence: "Insufficient evidence", monitoring: "Monitoring", resolved: "Resolved" }[value] || value);
+  const caseQueue = `<div class="queue-section-heading cases"><span>INVESTIGATION CASES</span><b>${investigationCases.filter(record => record.workflowStatus !== "resolved").length.toLocaleString()} active · ${investigationCases.filter(record => record.workflowStatus === "resolved").length.toLocaleString()} resolved</b></div>
+    <p class="panel-hint">Saved cases are collected here so reviewers can resume investigations without finding the cell in either source queue.</p>
+    ${investigationCases.length ? investigationCases.map(record => `<article class="case-queue-card status-${escapeHtml(record.workflowStatus)}"><div class="case-queue-head"><div><span>${escapeHtml(record.caseId)}</span><h3>${escapeHtml(record.location)}</h3><small>${record.riskRank != null ? `${escapeHtml(record.riskBand)} · AI rank #${record.riskRank}` : `Observed issue · ${escapeHtml(record.observedQuarter)}`}</small></div><div class="case-queue-actions"><b>${escapeHtml(statusLabel(record.workflowStatus))}</b><button class="btn btn-sm btn-outline-primary" onclick="flyToCell('${record.h3}'); setInsightTab('${record.riskRank != null ? "ai" : "overview"}')">Inspect cell</button></div></div><div class="case-queue-summary"><span><small>Recommended pathway</small><b>${escapeHtml(record.triage?.label || "Review")}</b></span><span><small>Measurement support</small><b>${escapeHtml(record.measurementSupport || "Not recorded")}</b></span><span><small>Last updated</small><b>${escapeHtml(new Date(record.updatedAt || record.createdAt).toLocaleDateString())}</b></span></div>${renderInvestigationCase(record, true)}</article>`).join("") : `<div class="queue-empty"><b>No investigation cases yet</b><span>Create a case from a Future risk or Observed issue card. It will appear here automatically.</span></div>`}`;
   document.getElementById("quarterlyPriorityList").innerHTML = state.finals
-    ? `${switcher}${triageFilters}${view === "current" ? currentQueue : futureQueue}`
+    ? `${switcher}${view === "cases" ? caseQueue : `${triageFilters}${view === "current" ? currentQueue : futureQueue}`}`
     : `<p>Quarterly forecast data is unavailable.</p>`;
 }
 
