@@ -155,7 +155,7 @@
  <div class="main-col main-col-left">
 
   <!-- ===================== MAP PANEL ===================== -->
-  <section class="panel map-panel">
+  <section class="panel map-panel" id="mapPanel">
     <div class="map-ambient" aria-hidden="true">
       <span class="ambient-glow glow-one"></span><span class="ambient-glow glow-two"></span>
       <span class="ambient-dot dot-one"></span><span class="ambient-dot dot-two"></span><span class="ambient-dot dot-three"></span><span class="ambient-dot dot-four"></span>
@@ -180,6 +180,7 @@
             <label class="map-layer-toggle"><input type="checkbox" id="toggleWeather"><span>Rain radar <small>Live context</small></span></label>
           </div>
         </details>
+        <button type="button" id="mapFullscreenBtn" class="map-fullscreen-btn" aria-label="Present map full screen" title="Present map full screen" aria-pressed="false"><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i><span>Full screen</span></button>
         <details class="map-overflow-popover map-control-menu">
           <summary aria-label="More map settings" title="More map settings"><i class="bi bi-three-dots"></i></summary>
           <div class="map-control-popover map-overflow-content">

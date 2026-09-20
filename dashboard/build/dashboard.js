@@ -26,6 +26,7 @@ const state = {
   quarterlyObserved: null,
   finals: null,      // authoritative 2026Q1 → 2026Q2 quarterly emerging-risk package
   finalsActualRevealed: false,
+  timeMachineOutcomeFilter: "all",
   onsetSnapshotT: null,      // panel.json hour-index matching the AI snapshot, or -1/null if none
   cityStats: null,           // city-wide mean/std of rtt/jitter/loss/demand, for per-cell AI explanations
   aiSummary: null,           // cached { degradedNowCount, topRiskCell } from renderAiPanel()
@@ -312,6 +313,8 @@ async function boot() {
 
   document.getElementById("exportReportBtn").addEventListener("click", exportExecutiveSummary);
   document.getElementById("guidedDemoBtn").addEventListener("click", advanceGuidedDemo);
+  document.getElementById("mapFullscreenBtn")?.addEventListener("click", toggleMapFullscreen);
+  document.addEventListener("fullscreenchange", syncMapFullscreenState);
   document.getElementById("sidebarToggle")?.addEventListener("click", () => document.body.classList.toggle("sidebar-collapsed"));
   document.querySelectorAll("[data-page]").forEach(btn => btn.addEventListener("click", () => setAppPage(btn.dataset.page)));
   document.querySelectorAll(".ai-workspace-tab").forEach(btn => btn.addEventListener("click", () => setAiWorkspaceTab(btn.dataset.aiTab)));
@@ -658,8 +661,8 @@ const ONSET_TIER_LABELS = {
 };
 const TIME_MACHINE_COLORS = {
   correctly_anticipated: "#2f855a",
-  false_alert: "#d69e2e",
-  missed: "#c43d54",
+  false_alert: "#7447a8",
+  missed: "#2563a6",
   correctly_lower_risk: "#64748b",
 };
 function onsetTierColor(c) {
@@ -675,7 +678,9 @@ function onsetTierColor(c) {
     return ONSET_TIER_COLORS[onsetValue("onset_priority_tier", c)] || "#cbd5e1";
   }
   if (state.finalsActualRevealed) {
-    return TIME_MACHINE_COLORS[onsetValue("time_machine_result", c)] ||
+    const result = onsetValue("time_machine_result", c);
+    if (state.timeMachineOutcomeFilter !== "all" && result !== state.timeMachineOutcomeFilter) return "#e2e8f0";
+    return TIME_MACHINE_COLORS[result] ||
       (onsetValue("current_status", c) === "currently_underperforming" ? "#7f1d1d" : "#e2e8f0");
   }
   if (onsetValue("current_status", c) === "currently_underperforming") return "#7f1d1d";
@@ -875,7 +880,15 @@ function hoverHtml(h3) {
         return `<b>2026Q2 AI priority:</b> ${ONSET_TIER_LABELS[tier] ?? "Not evaluated"}${rank != null ? ` · #${rank} of ${state.finals.metadata.eligible_cells?.toLocaleString?.() ?? "—"}` : ""}`;
       }
       if (state.finalsActualRevealed && onsetValue("time_machine_result", c)) {
-        return `<b>2026Q2 result:</b> ${timeMachineLabel(onsetValue("time_machine_result", c))}<br/><b>Forecast rank:</b> ${rank != null ? `#${rank}` : "Not ranked"}`;
+        const result = onsetValue("time_machine_result", c);
+        const actual = onsetValue("actual_next_quarter_status", c) === "underperforming" ? "Underperforming" : "Not underperforming";
+        const support = onsetValue("measurement_support", c);
+        const tests = onsetValue("ookla_tests", c);
+        return `<b>Held-out validation:</b> ${timeMachineLabel(result)}<br/>
+                <b>2026Q1 input:</b> Not underperforming<br/>
+                <b>AI shortlist:</b> ${rank != null && rank <= 200 ? `Top 200 · rank #${rank}` : rank != null ? `Outside Top 200 · rank #${rank}` : "Not ranked"}<br/>
+                <b>2026Q2 observed result:</b> ${actual}<br/>
+                <b>Measurement support:</b> ${support ? `${support.charAt(0).toUpperCase()}${support.slice(1)}` : "Not available"}${tests != null ? ` · ${tests} tests` : ""}`;
       }
       if (current === "currently_underperforming") return `<b>2026Q1 observed:</b> Underperforming<br/><b>AI forecast:</b> Not evaluated because the issue already existed`;
       return `<b>2026Q1 observed:</b> ${current === "currently_not_underperforming" ? "Not underperforming" : "Not measured"}<br/><b>2026Q2 priority:</b> ${ONSET_TIER_LABELS[tier] ?? "Not eligible"}${rank != null ? ` · #${rank} of ${state.finals.metadata.eligible_cells?.toLocaleString?.() ?? "—"}` : ""}`;
@@ -1001,7 +1014,9 @@ function renderMapColors() {
     const c = state.h3IndexOf.get(h3);
     const isSelected = h3 === state.selectedH3 || state.compareCells.includes(h3);
     const hasSelection = Boolean(state.selectedH3) || state.compareCells.length > 0;
-    const style = { fillColor: colorForMode(state.colorBy, t, c), color: isSelected ? "#c4b5fd" : "#334155", weight: isSelected ? 3.4 : (state.map.getZoom() <= 11 ? 0.25 : 0.5), opacity: isSelected ? 1 : (state.map.getZoom() <= 11 ? 0.3 : 0.65), dashArray: null, fillOpacity: hasSelection && !isSelected ? 0.34 : (isSelected ? 0.95 : (state.map.getZoom() <= 11 ? 0.55 : 0.7)) };
+    const timeMachineResult = state.onset ? onsetValue("time_machine_result", c) : null;
+    const filteredOut = state.colorBy === "onset" && state.finalsActualRevealed && state.timeMachineOutcomeFilter !== "all" && timeMachineResult !== state.timeMachineOutcomeFilter;
+    const style = { fillColor: colorForMode(state.colorBy, t, c), color: isSelected ? "#c4b5fd" : "#334155", weight: isSelected ? 3.4 : (state.map.getZoom() <= 11 ? 0.25 : 0.5), opacity: isSelected ? 1 : (filteredOut ? 0.12 : (state.map.getZoom() <= 11 ? 0.3 : 0.65)), dashArray: null, fillOpacity: filteredOut ? 0.08 : (hasSelection && !isSelected ? 0.34 : (isSelected ? 0.95 : (state.map.getZoom() <= 11 ? 0.55 : 0.7))) };
     if (state.onset && state.colorBy === "static_ai" && onsetValue("static_data_status", c) === "ai_estimated") {
       // Dashed outline flags AI-ESTIMATED cells vs. solid outline for observed_ookla —
       // never let the color alone imply a real measurement where there isn't one.
@@ -1012,6 +1027,19 @@ function renderMapColors() {
     if (state.onset && state.colorBy === "onset" && state.quarterlyMapView !== "observed" && onsetValue("alert_at_frozen_threshold", c)) {
       style.color = "#742a2a";
       style.weight = 1.4;
+    }
+    const prominentValidationResult = ["correctly_anticipated", "false_alert", "missed"].includes(timeMachineResult) ||
+      (state.timeMachineOutcomeFilter === "correctly_lower_risk" && timeMachineResult === "correctly_lower_risk");
+    if (state.colorBy === "onset" && state.finalsActualRevealed && prominentValidationResult && !filteredOut) {
+      style.color = TIME_MACHINE_COLORS[timeMachineResult];
+      style.weight = state.map.getZoom() <= 11 ? 1.35 : 1.9;
+      style.opacity = 1;
+      style.fillOpacity = hasSelection && !isSelected ? 0.52 : 0.84;
+    } else if (state.colorBy === "onset" && state.finalsActualRevealed && timeMachineResult === "correctly_lower_risk" && state.timeMachineOutcomeFilter === "all") {
+      style.color = TIME_MACHINE_COLORS.correctly_lower_risk;
+      style.weight = 0.2;
+      style.opacity = 0.18;
+      style.fillOpacity = hasSelection && !isSelected ? 0.08 : 0.2;
     }
     if (isSelected) Object.assign(style, { color: "#c4b5fd", weight: 3.4, opacity: 1, fillOpacity: 0.95 });
     layer.setStyle(style);
@@ -2277,6 +2305,35 @@ function timeMachineLabel(value) {
   })[value] || "Not available";
 }
 
+async function toggleMapFullscreen() {
+  const panel = document.getElementById("mapPanel");
+  if (!panel || !document.fullscreenEnabled) return;
+  try {
+    if (document.fullscreenElement === panel) await document.exitFullscreen();
+    else {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      await panel.requestFullscreen();
+    }
+  } catch (error) {
+    console.error("Map full-screen mode failed", error);
+  }
+}
+
+function syncMapFullscreenState() {
+  const panel = document.getElementById("mapPanel");
+  const button = document.getElementById("mapFullscreenBtn");
+  const active = Boolean(panel && document.fullscreenElement === panel);
+  document.body.classList.toggle("map-is-fullscreen", active);
+  if (button) {
+    button.setAttribute("aria-pressed", String(active));
+    button.setAttribute("aria-label", active ? "Exit full-screen map" : "Present map full screen");
+    button.title = active ? "Exit full-screen map" : "Present map full screen";
+    button.innerHTML = `<i class="bi ${active ? "bi-fullscreen-exit" : "bi-arrows-fullscreen"}" aria-hidden="true"></i><span>${active ? "Exit full screen" : "Full screen"}</span>`;
+    button.disabled = !document.fullscreenEnabled;
+  }
+  window.setTimeout(() => state.map?.invalidateSize(), 100);
+}
+
 function formatModelObservedValue(label, value) {
   if (value == null || value === "") return "—";
   const text = String(value).trim();
@@ -2317,11 +2374,22 @@ function renderFinalsTimeMachine() {
   const top50Hits = top50.filter(r => r.result === "correctly_anticipated").length;
   const recallPct = totalIssues ? (100 * captured / totalIssues).toFixed(1) : "—";
   const precisionPct = top50.length ? (100 * top50Hits / top50.length).toFixed(0) : "—";
-  el.innerHTML = `<div class="time-machine-outcomes" aria-label="Held-out forecast outcomes"><div class="outcome-correct"><i class="bi bi-check-circle-fill"></i><span>Correctly anticipated</span><b>${counts.correctly_anticipated || 0}</b></div><div class="outcome-alert"><i class="bi bi-exclamation-circle-fill"></i><span>False alert</span><b>${counts.false_alert || 0}</b></div><div class="outcome-missed"><i class="bi bi-x-circle-fill"></i><span>Missed</span><b>${counts.missed || 0}</b></div><div class="outcome-lower"><i class="bi bi-shield-check"></i><span>Correctly lower-risk</span><b>${counts.correctly_lower_risk || 0}</b></div></div><div class="time-machine-proof"><div><span>Top 200 reviewed</span><b>${reviewed} <small>/ ${results.length.toLocaleString()}</small></b></div><div><span>Emerging issues captured</span><b>${captured} <small>/ ${totalIssues}</small></b><em>${recallPct}%</em></div><div><span>Top-50 precision</span><b>${top50Hits} <small>/ ${top50.length}</small></b><em>${precisionPct}%</em></div></div><div class="ai-time-machine-card revealed"><div><span>Held-out ${state.finals.metadata.forecast_quarter} outcome</span><b>Forecast versus actual</b><small>The map now uses the four outcome categories. Ranking scores are not probabilities.</small></div><button class="btn btn-sm btn-outline-primary" onclick="hideFinalsActual()">Back to forecast</button></div>`;
+  const active = state.timeMachineOutcomeFilter;
+  const outcomeCard = (key, className, icon) => `<button type="button" class="${className}${active === key ? " is-active" : ""}" onclick="setTimeMachineOutcomeFilter('${key}')" aria-pressed="${active === key}"><i class="bi ${icon}"></i><span>${timeMachineLabel(key)}</span><b>${counts[key] || 0}</b><small>Show on map</small></button>`;
+  el.innerHTML = `<div class="time-machine-filter-head"><div><b>Map validation outcomes</b><span>Select a category to locate its cells.</span></div><button type="button" class="btn btn-sm btn-outline-primary${active === "all" ? " active" : ""}" onclick="setTimeMachineOutcomeFilter('all')" aria-pressed="${active === "all"}">All outcomes</button></div><div class="time-machine-outcomes" aria-label="Held-out forecast outcome map filters">${outcomeCard("correctly_anticipated", "outcome-correct", "bi-check-circle-fill")}${outcomeCard("false_alert", "outcome-alert", "bi-exclamation-circle-fill")}${outcomeCard("missed", "outcome-missed", "bi-x-circle-fill")}${outcomeCard("correctly_lower_risk", "outcome-lower", "bi-shield-check")}</div><div class="time-machine-proof"><div><span>Top 200 reviewed</span><b>${reviewed} <small>/ ${results.length.toLocaleString()}</small></b></div><div><span>Emerging issues captured</span><b>${captured} <small>/ ${totalIssues}</small></b><em>${recallPct}%</em></div><div><span>Top-50 precision</span><b>${top50Hits} <small>/ ${top50.length}</small></b><em>${precisionPct}%</em></div></div><div class="ai-time-machine-card revealed"><div><span>Held-out ${state.finals.metadata.forecast_quarter} outcome</span><b>Forecast versus actual</b><small>The map now uses the four outcome categories. Hover or select a cell to compare its rank with the known result. Ranking scores are not probabilities.</small></div><button class="btn btn-sm btn-outline-primary" onclick="hideFinalsActual()">Back to forecast</button></div>`;
+}
+
+function setTimeMachineOutcomeFilter(filter) {
+  if (!["all", ...Object.keys(TIME_MACHINE_COLORS)].includes(filter)) return;
+  state.timeMachineOutcomeFilter = filter;
+  renderFinalsTimeMachine();
+  renderMapColors();
+  renderLegend();
 }
 
 function hideFinalsActual() {
   state.finalsActualRevealed = false;
+  state.timeMachineOutcomeFilter = "all";
   renderFinalsTimeMachine(); renderMapColors(); renderLegend(); syncPrimaryMapControls();
   if (state.selectedH3) renderSelectedAreaInsights();
 }
@@ -2329,6 +2397,7 @@ function hideFinalsActual() {
 function revealFinalsActual() {
   if (!state.finals) return;
   state.finalsActualRevealed = true;
+  state.timeMachineOutcomeFilter = "all";
   renderFinalsTimeMachine();
   renderMapColors();
   renderLegend();
