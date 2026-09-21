@@ -1,0 +1,33 @@
+{
+  "_comment": "Hand-compiled context template. Copy to <h3_index>.json, fill in, and the dashboard serves it with a MANUALLY COMPILED badge. Delete the _comment key. Verify every source_url yourself before using this.",
+  "h3": "<h3_index>",
+  "forecastQuarter": "2026Q2",
+  "status": "context_found",
+  "retrievedAt": "2026-09-21T00:00:00.000Z",
+  "source": "manual",
+  "contextItems": [
+    {
+      "name": "Event name",
+      "date": "2026-05-14",
+      "venue": "Venue name",
+      "estAttendance": null,
+      "distanceKm": 1.2,
+      "category": "event",
+      "sourceName": "Publisher name",
+      "sourceUrl": "https://example.com/page-you-actually-checked",
+      "confidence": "high"
+    }
+  ],
+  "droppedUnsourced": 0,
+  "summary": "One or two neutral sentences. No causal language.",
+  "actions": [
+    {
+      "id": "targeted_measurement",
+      "type": "Verify",
+      "title": "Schedule targeted QoE measurement around the event window",
+      "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+      "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+    }
+  ],
+  "note": null
+}

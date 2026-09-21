@@ -1,0 +1,65 @@
+{
+  "_README": [
+    "Closed catalogue of regulator actions the context-brief feature is allowed to suggest.",
+    "The language model SELECTS from this list and writes a one-line rationale; it cannot",
+    "invent a new action type and cannot invent an ITU citation. Edit this file to change",
+    "the action vocabulary or the wording that appears in the dashboard.",
+    "",
+    "IMPORTANT — verify every `itu_reference` below against the current ITU-T catalogue",
+    "(https://www.itu.int/ITU-T/recommendations/) before presenting this to regulators or",
+    "judges. Recommendation numbers and titles are transcribed here for convenience and are",
+    "NOT automatically checked by the code. Do not add clause or section numbers unless you",
+    "have confirmed them in the published text."
+  ],
+  "max_actions": 3,
+  "actions": [
+    {
+      "id": "targeted_measurement",
+      "type": "Verify",
+      "title": "Schedule targeted QoE measurement around the event window",
+      "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+      "itu_reference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks",
+      "applies_when": "Corroborated scheduled context exists in or near the forecast quarter."
+    },
+    {
+      "id": "operator_information_request",
+      "type": "Request",
+      "title": "Request operator verification of the local network condition",
+      "detail": "Ask the operator to confirm the measured condition in this area for the period, and to state any planned optimisation or maintenance works already scheduled.",
+      "itu_reference": "ITU-T E.802 — Framework and methodologies for the determination and application of QoS parameters",
+      "applies_when": "Any prioritised cell where the regulator does not hold operator-side evidence."
+    },
+    {
+      "id": "event_readiness_coordination",
+      "type": "Coordinate",
+      "title": "Request an operator event-readiness plan for the period",
+      "detail": "Where a capacity concern is confirmed by the operator, ask for the readiness plan covering the event window. The engineering remedy remains the operator's decision.",
+      "itu_reference": "ITU-T E.800 — Definitions of terms related to quality of service",
+      "applies_when": "High band, corroborated context, and an operator response already confirms a capacity concern."
+    },
+    {
+      "id": "baseline_evidence_collection",
+      "type": "Verify",
+      "title": "Collect additional baseline measurement before escalation",
+      "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+      "itu_reference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks",
+      "applies_when": "Measurement support is limited, or the triage pathway is Verify first."
+    },
+    {
+      "id": "consumer_information_monitoring",
+      "type": "Monitor",
+      "title": "Monitor consumer complaints and service reports for the period",
+      "detail": "Track complaint and service-report volumes for this area across the window as an independent corroborating signal alongside measurement.",
+      "itu_reference": "ITU-T E.800 — Definitions of terms related to quality of service",
+      "applies_when": "Any prioritised cell; particularly where scheduled context raises expected demand."
+    },
+    {
+      "id": "routine_quarterly_review",
+      "type": "Monitor",
+      "title": "Continue routine quarterly review",
+      "detail": "No corroborated scheduled context was found for this area and period. Proceed with the standard quarterly triage pathway already recommended for this cell.",
+      "itu_reference": "ITU-T E.802 — Framework and methodologies for the determination and application of QoS parameters",
+      "applies_when": "No corroborated context was retrieved."
+    }
+  ]
+}

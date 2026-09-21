@@ -197,19 +197,27 @@ already sitting in `ai_model/` or the pipeline output — nothing fabricated:
 
 ## 2. Run it
 
-Any of these three work — pick whichever is already on your machine:
-
 ```bash
-# Option A - Python (simplest, no install)
-python3 -m http.server 3000
-
-# Option B - Node (included, zero dependencies)
+# Node (recommended - required for local context retrieval)
 node server.js 3000
 
-# Option C - Docker (see Dockerfile; build once data/ exists)
+# Docker (see Dockerfile; build once data/ exists)
 docker build -t geoqoe-pulse .
-docker run --rm -p 3000:3000 geoqoe-pulse
+docker run --rm -p 3000:3000 --env-file .env geoqoe-pulse
+
+# Python - STATIC ONLY, see the warning below
+python3 -m http.server 3000
 ```
+
+> **Use `node server.js` if you want the "Find local context" button to work.**
+> Python's `http.server` cannot serve the `POST /api/context-brief` route — it
+> answers `501 Unsupported method`. The dashboard handles that gracefully, which
+> is the problem: the button returns "No corroborated upcoming context found"
+> every time, looking exactly like a genuine empty result rather than a
+> misconfigured server. Everything else on the dashboard works fine under Python.
+
+Start the server once and leave it running. See "Local context retrieval" below
+for when a restart is actually needed.
 
 Then open **http://localhost:3000**. Opening `index.html` directly via
 `file://` will NOT work — browsers block `fetch()` of local files under that

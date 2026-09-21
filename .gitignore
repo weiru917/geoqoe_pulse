@@ -23,3 +23,8 @@ Thumbs.db
 /data/panel.json
 /data/summary_stats.json
 /build_dashboard_pandas.py
+
+# Local API credentials for dashboard context retrieval (see dashboard/build/.env.example)
+.env
+*.env
+!*.env.example

@@ -60,6 +60,9 @@ const state = {
   compareCells: [],         // array of h3_index, max COMPARE_MAX
   tracking: {},             // h3_index -> "planned" | "done", persisted to localStorage
   investigationCases: {},  // h3_index -> locally stored quarterly investigation handoff
+  contextBriefs: {},       // h3_index -> retrieved scheduled-event context brief
+  contextBriefLoading: new Set(),
+  contextBriefOpen: new Set(),   // h3 of briefs expanded in the queue
   profile: "balanced",      // QoE weighting profile — see PROFILE_WEIGHTS
   whatIfEnabled: false,
   whatIfPct: 20,            // -50..+100, % capacity change
@@ -188,6 +191,7 @@ async function boot() {
   state.rangeEnd = panel.num_timestamps - 1;
   loadTracking();
   loadInvestigationCases();
+  loadCachedContextBriefs();
 
   panel.h3_ids.forEach((h3, i) => state.h3IndexOf.set(h3, i));
   grid.features.forEach(f => state.gridPropsByH3.set(f.properties.h3_index, f.properties));
@@ -2769,6 +2773,213 @@ function setQuarterlyTriageFilter(value) {
   renderQuarterlyQueue();
 }
 
+// ---------------------------------------------------------------------------
+// Local context retrieval
+//
+// Asks the server (never the browser — the API key stays server-side) to search
+// for publicly scheduled events and holidays that fall inside the forecast
+// quarter near this cell, then to select regulator next-actions from the closed
+// ITU-referenced catalogue in regulator_actions.json.
+//
+// This runs AFTER the forecast and plays no part in the ranking. The panel says
+// so permanently, because a judge or a regulator must never read the retrieved
+// context as the model's stated cause.
+// ---------------------------------------------------------------------------
+
+const CONTEXT_BRIEF_ENDPOINT = "./api/context-brief";
+
+function contextBriefPayload(h3) {
+  const row = quarterlyRecordForH3(h3);
+  const props = state.gridPropsByH3.get(h3) || {};
+  const c = row?.c;
+  const observed = row?.status === "currently_underperforming";
+  const meta = state.finals?.metadata || {};
+  return {
+    h3,
+    cellName: cellName(h3),
+    lat: props.centroid_lat,
+    lon: props.centroid_lon,
+    forecastQuarter: meta.forecast_quarter ?? "2026Q2",
+    predictorQuarter: meta.predictor_quarter ?? "2026Q1",
+    cell: {
+      observedStatus: observed ? "Underperforming" : row?.status === "currently_not_underperforming" ? "Not underperforming" : "Not measured",
+      riskBand: row?.rank != null ? (ONSET_TIER_LABELS[row.tier] ?? row.tier) : "Not forecast-eligible",
+      riskRank: row?.rank == null ? null : Math.round(row.rank),
+      eligibleCells: meta.eligible_cells ?? null,
+      triageLabel: row ? quarterlyTriageRecommendation(row, observed).label : null,
+      downloadMbps: row?.dl ?? null,
+      uploadMbps: row?.ul ?? null,
+      latencyMs: row?.rtt ?? null,
+      measurementSupport: row ? quarterlySupportLevel(row.support, row.tests) : null,
+      populationDay: row?.population ?? props.population_day ?? null,
+      populationDensityPerKm2: c == null ? null : onsetValue("population_density_per_km2", c),
+      towerDensityPerKm2: c == null ? null : onsetValue("tower_density_per_km2", c),
+      builtUpRatio: (c == null ? null : onsetValue("built_up_ratio", c)) ?? props.built_up_ratio ?? null,
+      topContributor: row?.driver ?? null,
+    },
+  };
+}
+
+// Pull every already-cached brief in one request at startup, so pre-warmed
+// cells show their context with no click. Deliberately fire-and-forget: the
+// dashboard must render normally whether or not this succeeds, and cells that
+// are NOT cached keep the "Find local context" button so live retrieval can
+// still be demonstrated (and used) on any other cell.
+async function loadCachedContextBriefs() {
+  try {
+    const res = await fetch("./api/context-cache");
+    if (!res.ok) return;
+    const briefs = await res.json();
+    let loaded = 0;
+    for (const [h3, brief] of Object.entries(briefs || {})) {
+      // Never clobber something retrieved live in this session.
+      if (state.contextBriefs[h3]) continue;
+      state.contextBriefs[h3] = brief;
+      loaded++;
+    }
+    if (loaded) {
+      Object.keys(briefs).forEach(paintContextBrief);
+      if (document.getElementById("quarterlyPriorityList")?.children.length) renderQuarterlyQueue();
+    }
+  } catch {
+    // Static server, or no cache directory — the button path still works.
+  }
+}
+
+async function findLocalContext(h3, refresh = false) {
+  if (state.contextBriefLoading.has(h3)) return;
+  state.contextBriefLoading.add(h3);
+  paintContextBrief(h3);
+  try {
+    const res = await fetch(`${CONTEXT_BRIEF_ENDPOINT}${refresh ? "?refresh=1" : ""}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(contextBriefPayload(h3)),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state.contextBriefs[h3] = await res.json();
+  } catch {
+    // The server already collapses its own failures into a neutral empty brief.
+    // This path only catches the dashboard being opened from the filesystem, or
+    // the server being unreachable — present it identically, not as an error.
+    state.contextBriefs[h3] = {
+      h3, status: "no_context", source: "none", contextItems: [], actions: [],
+      retrievedAt: new Date().toISOString(),
+      summary: "No corroborated upcoming context found for this area and period.",
+      note: "Context retrieval is unavailable from this dashboard server.",
+    };
+  } finally {
+    state.contextBriefLoading.delete(h3);
+    state.contextBriefOpen.add(h3);
+    paintContextBrief(h3);
+    // Keep any saved investigation case in step with what is displayed.
+    if (state.investigationCases[h3]) {
+      state.investigationCases[h3].localContext = contextSnapshot(h3);
+      state.investigationCases[h3].updatedAt = new Date().toISOString();
+      saveInvestigationCases();
+    }
+  }
+}
+
+// Trimmed copy of the brief for the investigation-case evidence snapshot.
+function contextSnapshot(h3) {
+  const brief = state.contextBriefs[h3];
+  if (!brief) return null;
+  return {
+    status: brief.status,
+    retrievedAt: brief.retrievedAt,
+    source: brief.source,
+    contextItems: (brief.contextItems || []).map(item => ({
+      name: item.name, date: item.date, venue: item.venue,
+      distanceKm: item.distanceKm, sourceName: item.sourceName,
+      sourceUrl: item.sourceUrl, confidence: item.confidence,
+    })),
+    suggestedActions: (brief.actions || []).map(a => ({ type: a.type, title: a.title, ituReference: a.ituReference })),
+    disclaimer: "Public scheduled information retrieved after the forecast. It did not inform the model's ranking.",
+  };
+}
+
+function setContextBriefOpen(h3, open) {
+  if (open) state.contextBriefOpen.add(h3); else state.contextBriefOpen.delete(h3);
+}
+
+function paintContextBrief(h3) {
+  const host = document.getElementById(`contextBrief-${h3}`);
+  if (host) host.innerHTML = contextBriefHtml(h3);
+}
+
+function contextBriefHtml(h3) {
+  const loading = state.contextBriefLoading.has(h3);
+  const brief = state.contextBriefs[h3];
+
+  if (loading) {
+    return `<div class="context-brief is-loading"><span class="context-spinner" aria-hidden="true"></span><div><b>Searching public sources…</b><small>Looking for scheduled events and holidays in the forecast window. This can take up to a minute.</small></div></div>`;
+  }
+  if (!brief) {
+    return `<div class="context-handoff"><button class="btn btn-sm btn-outline-primary" onclick="findLocalContext('${h3}')"><i class="bi bi-search"></i> Find local context</button><small>Search public sources for events and holidays in the forecast quarter, then suggest ITU-referenced next steps</small></div>`;
+  }
+
+  const items = brief.contextItems || [];
+  const found = brief.status === "context_found" && items.length;
+  const retrieved = brief.retrievedAt ? new Date(brief.retrievedAt).toLocaleDateString() : "—";
+  // A hand-compiled brief must never wear the "retrieved" label — the whole
+  // point of the badge is that a reader can trust where the context came from.
+  const manual = brief.source === "manual";
+  const sourceChip = manual ? "MANUALLY COMPILED"
+    : brief.source === "cache" ? "RETRIEVED &amp; VERIFIED"
+    : brief.source === "live" ? "RETRIEVED LIVE" : "NOT RETRIEVED";
+  const datedLabel = manual ? "Compiled" : "Retrieved";
+
+  const itemsHtml = found
+    ? `<ul class="context-item-list">${items.map(item => `<li class="context-item">
+        <h5 class="context-item-name">${escapeHtml(item.name)}</h5>
+        <div class="context-item-facts">
+          ${item.date ? `<span class="context-date"><i class="bi bi-calendar-event"></i>${escapeHtml(item.date)}</span>` : ""}
+          ${item.distanceKm != null ? `<span class="context-distance"><i class="bi bi-rulers"></i>${Number(item.distanceKm).toFixed(1)} km</span>` : ""}
+          ${item.estAttendance != null ? `<span class="context-attendance"><i class="bi bi-people"></i>${Math.round(item.estAttendance).toLocaleString()}</span>` : ""}
+          <span class="context-confidence conf-${escapeHtml(item.confidence)}">${escapeHtml(item.confidence)} confidence</span>
+        </div>
+        ${item.venue ? `<div class="context-venue"><i class="bi bi-geo-alt"></i>${escapeHtml(item.venue)}</div>` : ""}
+        <a class="context-source" href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right"></i>${escapeHtml(item.sourceName || "Source")}</a>
+      </li>`).join("")}</ul>`
+    : `<p class="context-empty"><i class="bi bi-info-circle"></i>No corroborated upcoming context found for this area and period.${brief.note ? ` ${escapeHtml(brief.note)}` : ""}</p>`;
+
+  const actionsHtml = (brief.actions || []).length
+    ? `<ol class="context-action-list">${brief.actions.map(a => `<li>
+        <div class="context-action-head"><span class="context-action-type type-${escapeHtml(String(a.type).toLowerCase())}">${escapeHtml(a.type)}</span><b>${escapeHtml(a.title)}</b></div>
+        <p>${escapeHtml(a.detail)}</p>
+        <small class="context-itu"><i class="bi bi-journal-text"></i>${escapeHtml(a.ituReference)}</small>
+      </li>`).join("")}</ol>`
+    : "";
+
+  // The headline stays visible while collapsed, so a reviewer can scan the
+  // queue and see which cells have context without expanding anything.
+  const earliest = found
+    ? items.map(i => i.date).filter(Boolean).sort()[0]
+    : null;
+  const headline = found
+    ? `<b>${items.length} scheduled item${items.length === 1 ? "" : "s"}</b>${earliest ? ` · from ${escapeHtml(earliest)}` : ""}`
+    : `<span class="context-none">No corroborated context</span>`;
+  const isOpen = state.contextBriefOpen.has(h3);
+
+  return `<details class="context-brief ${found ? "has-context" : "no-context"}"${isOpen ? " open" : ""}
+      ontoggle="setContextBriefOpen('${h3}', this.open)">
+    <summary class="context-brief-summary">
+      <span class="cheat-badge context${manual ? " manual" : ""}">CONTEXT</span>
+      <span class="context-headline">${headline}</span>
+      <span class="context-retrieved">${datedLabel} ${escapeHtml(retrieved)}</span>
+    </summary>
+    <div class="context-brief-body">
+      <div class="context-brief-head"><span class="context-source-chip">${sourceChip}</span><button class="context-refresh" onclick="findLocalContext('${h3}', true)" title="Search public sources again"><i class="bi bi-arrow-clockwise"></i> Search again</button></div>
+      ${found && brief.summary ? `<p class="context-summary">${escapeHtml(brief.summary)}</p>` : ""}
+      <div class="context-block"><span class="context-block-label">Public scheduled context</span>${itemsHtml}</div>
+      ${brief.droppedUnsourced ? `<p class="context-dropped"><i class="bi bi-funnel"></i>${brief.droppedUnsourced} candidate item(s) were discarded because no retrieved source corroborated them.</p>` : ""}
+      <div class="context-block"><span class="context-block-label">Suggested next steps for the regulator</span>${actionsHtml}</div>
+      <p class="context-disclaimer">${manual ? "This context was <b>compiled and verified by a human reviewer</b>, not retrieved by a language model. " : ""}Context is public scheduled information gathered <b>after</b> the forecast. It did not inform the model's ranking. Suggested steps are selected from a fixed, ITU-referenced catalogue and are procedural regulator actions — they do not specify an engineering remedy, which remains the operator's decision.</p>
+    </div>
+  </details>`;
+}
+
 function createInvestigationCase(h3) {
   const row = quarterlyRecordForH3(h3);
   if (!row) return;
@@ -2813,6 +3024,7 @@ function createInvestigationCase(h3) {
       builtUpRatio: onsetValue("built_up_ratio", c),
       viirsHumanActivityProxy: onsetValue("viirs_rad_quarter", c),
     },
+    localContext: contextSnapshot(h3),
     workflowStatus: "open",
     verificationDate: "",
     evidenceSource: "",
@@ -2843,7 +3055,11 @@ function updateInvestigationCase(h3, field, value) {
 function investigationBriefText(record) {
   const fmt = (value, unit = "") => value == null ? "Not available" : `${Number(value).toFixed(1)}${unit}`;
   const contributors = record.contributors?.length ? record.contributors.map(item => `- ${item.label}: ${formatModelObservedValue(item.label, item.value)}`).join("\n") : "- None available";
-  return `GeoQoE Pulse Investigation Brief\nCase: ${record.caseId}\nLocation: ${record.location}\nH3 cell: ${record.h3}\nCreated: ${record.createdAt}\n\nQuarterly context\nObserved ${record.observedQuarter}: ${record.observedStatus}\nForecast ${record.forecastQuarter}: ${record.riskBand}${record.riskRank != null ? ` · rank #${record.riskRank}` : ""}\nSystem triage: ${record.triage.label}\nReason: ${record.triage.reason}\nSuggested next step: ${record.triage.next}\n\nQuarterly measurements\nDownload: ${fmt(record.measurements.downloadMbps, " Mbps")}\nUpload: ${fmt(record.measurements.uploadMbps, " Mbps")}\nLatency: ${fmt(record.measurements.latencyMs, " ms")}\nMeasurement support: ${record.measurementSupport}${record.ooklaTests != null ? ` · ${record.ooklaTests} Ookla tests` : ""}\n\nModel contributors\n${contributors}\n\nHuman verification\nStatus: ${record.workflowStatus}\nEvidence source: ${record.evidenceSource || "Not recorded"}\nVerification date: ${record.verificationDate || "Not recorded"}\nNext review: ${record.nextReviewDate || "Not recorded"}\nNotes: ${record.notes || "None"}\n\nModel version: ${record.modelVersion}\n${record.disclaimer}`;
+  const context = record.localContext;
+  const contextBlock = !context ? "" : context.status === "context_found" && context.contextItems?.length
+    ? `\n\nPublic scheduled context (retrieved ${new Date(context.retrievedAt).toLocaleDateString()}; did not inform the ranking)\n${context.contextItems.map(item => `- ${item.name} — ${item.date}${item.venue ? ` · ${item.venue}` : ""}${item.distanceKm != null ? ` · ${Number(item.distanceKm).toFixed(1)} km` : ""}\n  Source: ${item.sourceUrl}`).join("\n")}\n\nSuggested next steps (fixed ITU-referenced catalogue)\n${(context.suggestedActions || []).map((a, i) => `${i + 1}. [${a.type}] ${a.title}\n   Reference: ${a.ituReference}`).join("\n")}`
+    : `\n\nPublic scheduled context\nNo corroborated upcoming context found for this area and period.`;
+  return `GeoQoE Pulse Investigation Brief\nCase: ${record.caseId}\nLocation: ${record.location}\nH3 cell: ${record.h3}\nCreated: ${record.createdAt}\n\nQuarterly context\nObserved ${record.observedQuarter}: ${record.observedStatus}\nForecast ${record.forecastQuarter}: ${record.riskBand}${record.riskRank != null ? ` · rank #${record.riskRank}` : ""}\nSystem triage: ${record.triage.label}\nReason: ${record.triage.reason}\nSuggested next step: ${record.triage.next}\n\nQuarterly measurements\nDownload: ${fmt(record.measurements.downloadMbps, " Mbps")}\nUpload: ${fmt(record.measurements.uploadMbps, " Mbps")}\nLatency: ${fmt(record.measurements.latencyMs, " ms")}\nMeasurement support: ${record.measurementSupport}${record.ooklaTests != null ? ` · ${record.ooklaTests} Ookla tests` : ""}\n\nModel contributors\n${contributors}${contextBlock}\n\nHuman verification\nStatus: ${record.workflowStatus}\nEvidence source: ${record.evidenceSource || "Not recorded"}\nVerification date: ${record.verificationDate || "Not recorded"}\nNext review: ${record.nextReviewDate || "Not recorded"}\nNotes: ${record.notes || "None"}\n\nModel version: ${record.modelVersion}\n${record.disclaimer}`;
 }
 
 async function copyInvestigationBrief(h3) {
@@ -2947,6 +3163,7 @@ function renderQuarterlyQueue() {
       <section class="triage-recommendation triage-${triage.key}"><div class="triage-pathway"><span>Recommended pathway</span><b>${triage.label}</b></div><div class="triage-summary-lines"><span>Reason</span><b>${conciseReason}</b><span>Next check</span><b>${triage.next}</b></div></section>
       <p class="quarterly-why"><span>Why prioritised</span><b>${why}</b></p>
       <details class="queue-evidence-detail"><summary>Evidence &amp; recommendation details</summary><div class="queue-detail-list"><div><span>${observed ? "Evidence state" : "Top model contributor"}</span><b>${evidence}</b></div><div><span>Quarterly measurement support</span><b>${r.support ?? "Not reported"}${r.tests != null ? ` · ${Number(r.tests).toLocaleString()} tests` : ""}</b></div><div><span>Population context</span><b>${r.population != null ? Math.round(r.population).toLocaleString() : "Not available"}</b></div><div><span>Supporting evidence</span><b>${supportingEvidence}</b></div><div><span>Recommendation rationale</span><b>${triage.rule}</b></div></div><p class="queue-policy-note">Relative prioritisation and transparent triage guidance; neither establishes an engineering cause or changes the AI rank.</p></details>
+      <div class="context-brief-host" id="contextBrief-${r.h3}">${contextBriefHtml(r.h3)}</div>
       ${savedCase ? renderInvestigationCase(savedCase, !observed) : `<div class="quarterly-handoff"><button class="btn btn-sm btn-outline-primary" onclick="createInvestigationCase('${r.h3}')"><i class="bi bi-file-earmark-plus"></i>Create investigation case</button><small>Save an evidence snapshot for handoff and outcome tracking</small></div>`}
     </article>`;
   };
@@ -2972,7 +3189,7 @@ function renderQuarterlyQueue() {
   const statusLabel = value => ({ open: "Open", investigating: "Investigating", confirmed_issue: "Confirmed issue", not_confirmed: "Not confirmed", insufficient_evidence: "Insufficient evidence", monitoring: "Monitoring", resolved: "Resolved" }[value] || value);
   const caseQueue = `<div class="queue-section-heading cases"><span>INVESTIGATION CASES</span><b>${investigationCases.filter(record => record.workflowStatus !== "resolved").length.toLocaleString()} active · ${investigationCases.filter(record => record.workflowStatus === "resolved").length.toLocaleString()} resolved</b></div>
     <p class="panel-hint">Saved cases are collected here so reviewers can resume investigations without finding the cell in either source queue.</p>
-    ${investigationCases.length ? investigationCases.map(record => `<article class="case-queue-card status-${escapeHtml(record.workflowStatus)}"><div class="case-queue-head"><div><span>${escapeHtml(record.caseId)}</span><h3>${escapeHtml(record.location)}</h3><small>${record.riskRank != null ? `${escapeHtml(record.riskBand)} · AI rank #${record.riskRank}` : `Observed issue · ${escapeHtml(record.observedQuarter)}`}</small></div><div class="case-queue-actions"><b>${escapeHtml(statusLabel(record.workflowStatus))}</b><button class="btn btn-sm btn-outline-primary" onclick="flyToCell('${record.h3}'); setInsightTab('${record.riskRank != null ? "ai" : "overview"}')">Inspect cell</button></div></div><div class="case-queue-summary"><span><small>Recommended pathway</small><b>${escapeHtml(record.triage?.label || "Review")}</b></span><span><small>Measurement support</small><b>${escapeHtml(record.measurementSupport || "Not recorded")}</b></span><span><small>Last updated</small><b>${escapeHtml(new Date(record.updatedAt || record.createdAt).toLocaleDateString())}</b></span></div>${renderInvestigationCase(record, true)}</article>`).join("") : `<div class="queue-empty"><b>No investigation cases yet</b><span>Create a case from a Future risk or Observed issue card. It will appear here automatically.</span></div>`}`;
+    ${investigationCases.length ? investigationCases.map(record => `<article class="case-queue-card status-${escapeHtml(record.workflowStatus)}"><div class="case-queue-head"><div><span>${escapeHtml(record.caseId)}</span><h3>${escapeHtml(record.location)}</h3><small>${record.riskRank != null ? `${escapeHtml(record.riskBand)} · AI rank #${record.riskRank}` : `Observed issue · ${escapeHtml(record.observedQuarter)}`}</small></div><div class="case-queue-actions"><b>${escapeHtml(statusLabel(record.workflowStatus))}</b><button class="btn btn-sm btn-outline-primary" onclick="flyToCell('${record.h3}'); setInsightTab('${record.riskRank != null ? "ai" : "overview"}')">Inspect cell</button></div></div><div class="case-queue-summary"><span><small>Recommended pathway</small><b>${escapeHtml(record.triage?.label || "Review")}</b></span><span><small>Measurement support</small><b>${escapeHtml(record.measurementSupport || "Not recorded")}</b></span><span><small>Last updated</small><b>${escapeHtml(new Date(record.updatedAt || record.createdAt).toLocaleDateString())}</b></span></div><div class="context-brief-host" id="contextBrief-${record.h3}">${contextBriefHtml(record.h3)}</div>${renderInvestigationCase(record, true)}</article>`).join("") : `<div class="queue-empty"><b>No investigation cases yet</b><span>Create a case from a Future risk or Observed issue card. It will appear here automatically.</span></div>`}`;
   document.getElementById("quarterlyPriorityList").innerHTML = state.finals
     ? `${switcher}${view === "cases" ? caseQueue : `${triageFilters}${view === "current" ? currentQueue : futureQueue}`}`
     : `<p>Quarterly forecast data is unavailable.</p>`;

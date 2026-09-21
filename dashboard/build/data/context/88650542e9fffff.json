@@ -1,0 +1,58 @@
+{
+  "h3": "88650542e9fffff",
+  "forecastQuarter": "2026Q2",
+  "status": "context_found",
+  "retrievedAt": "2026-09-21T06:32:21.722Z",
+  "source": "live",
+  "provider": "groq",
+  "searchProvider": "exa",
+  "model": "openai/gpt-oss-120b",
+  "spend": {
+    "turns": 1,
+    "inputTokens": 3316,
+    "outputTokens": 1386
+  },
+  "contextItems": [
+    {
+      "name": "Zoo Negara Multi‑Animal Show",
+      "date": "Weekdays (Mon‑Fri) 11:00 AM & 3:00 PM, 2026‑04‑01 to 2026‑06‑30",
+      "venue": "Zoo Negara Amphitheatre, 5, Jalan Taman Zooview, Taman Zooview, 68000 Ampang, Selangor",
+      "estAttendance": 0,
+      "distanceKm": 0,
+      "category": "event",
+      "sourceName": "UAK Travel",
+      "sourceUrl": "https://uaktravel.com/amphitheater-show-animal-show-zoo-negara",
+      "confidence": "high"
+    },
+    {
+      "name": "Zoo Negara Multi‑Animal Show (Facebook announcement)",
+      "date": "Weekdays (Mon‑Fri) 11:00 AM & 3:00 PM, 2026‑04‑01 to 2026‑06‑30",
+      "venue": "Zoo Negara Amphitheatre, Ampang, Selangor",
+      "estAttendance": 0,
+      "distanceKm": 0,
+      "category": "event",
+      "sourceName": "Zoo Negara Facebook",
+      "sourceUrl": "https://www.facebook.com/znegaramalaysia/videos/come-visit-our-multi-animal-show-it-opens-daily-and-closes-on-fridays-except-for/1135216747497977/",
+      "confidence": "high"
+    }
+  ],
+  "droppedUnsourced": 0,
+  "summary": "Two publicly announced recurring animal shows are scheduled at Zoo Negara Amphitheatre on weekdays throughout the forecast quarter.",
+  "actions": [
+    {
+      "id": "targeted_measurement",
+      "type": "Verify",
+      "title": "Schedule targeted QoE measurement around the event window",
+      "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+      "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+    },
+    {
+      "id": "baseline_evidence_collection",
+      "type": "Verify",
+      "title": "Collect additional baseline measurement before escalation",
+      "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+      "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+    }
+  ],
+  "note": null
+}

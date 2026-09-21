@@ -41,10 +41,15 @@ Open the dashboard through a local web server, not by double-clicking the HTML f
 
 ```bash
 cd dashboard/build
-python -m http.server 3000
+node server.js 3000
 ```
 
 Then open `http://localhost:3000`.
+
+`python -m http.server 3000` also serves the dashboard, but the **Find local
+context** button will not work under it — that button needs a POST route which
+the Python static server cannot answer, so it silently reports "no corroborated
+upcoming context found" for every cell.
 
 ## The header and global controls
 

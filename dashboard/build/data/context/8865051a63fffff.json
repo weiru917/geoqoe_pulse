@@ -1,0 +1,58 @@
+{
+  "h3": "8865051a63fffff",
+  "forecastQuarter": "2026Q2",
+  "status": "context_found",
+  "retrievedAt": "2026-09-21T06:49:32.719Z",
+  "source": "live",
+  "provider": "groq",
+  "searchProvider": "exa",
+  "model": "openai/gpt-oss-120b",
+  "spend": {
+    "turns": 1,
+    "inputTokens": 3548,
+    "outputTokens": 953
+  },
+  "contextItems": [
+    {
+      "name": "Konsert Gala Alumni Melodi Sepanjang Zaman 2026",
+      "date": "2026-06-20",
+      "venue": "Dewan Canselor Tun Abdul Razak (DECTAR), Off Jalan Bunga Raya, 43600 Bangi, Selangor, Malaysia",
+      "estAttendance": 0,
+      "distanceKm": 0,
+      "category": "event",
+      "sourceName": "MyTrip Malaysia",
+      "sourceUrl": "https://mytrip.my/konsert-gala-alumni-melodi-sepanjang-zaman-2026/",
+      "confidence": "high"
+    },
+    {
+      "name": "20th Concert of Chinese Traditional Orchestra ARTISUKMA UKM",
+      "date": "2026-06-14",
+      "venue": "Pusat Siswazah UKM, Universiti Kebangsaan Malaysia, Jalan Reko Bangi, 43600 Bangi, Selangor, Malaysia",
+      "estAttendance": 0,
+      "distanceKm": 0,
+      "category": "event",
+      "sourceName": "KL Events Calendar",
+      "sourceUrl": "https://kleventscalendar.my/event/20th-concert-of-chinese-traditional-orchestra-artisukma-ukm/",
+      "confidence": "high"
+    }
+  ],
+  "droppedUnsourced": 0,
+  "summary": "Two publicly announced concerts are scheduled in Bangi during the forecast quarter: a gala alumni concert on 20 June and a Chinese traditional orchestra concert on 14 June, both at local university venues.",
+  "actions": [
+    {
+      "id": "targeted_measurement",
+      "type": "Verify",
+      "title": "Schedule targeted QoE measurement around the event window",
+      "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+      "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+    },
+    {
+      "id": "baseline_evidence_collection",
+      "type": "Verify",
+      "title": "Collect additional baseline measurement before escalation",
+      "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+      "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+    }
+  ],
+  "note": null
+}

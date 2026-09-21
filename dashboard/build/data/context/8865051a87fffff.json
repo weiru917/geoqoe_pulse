@@ -1,0 +1,54 @@
+{
+  "h3": "8865051a87fffff",
+  "forecastQuarter": "2026Q2",
+  "status": "context_found",
+  "retrievedAt": "2026-09-21T05:07:51.721Z",
+  "source": "live",
+  "provider": "groq",
+  "searchProvider": "exa",
+  "model": "openai/gpt-oss-120b",
+  "spend": {
+    "turns": 1,
+    "inputTokens": 3398,
+    "outputTokens": 991
+  },
+  "contextItems": [
+    {
+      "name": "Kelas Asas REVOLUSI DAPUR",
+      "date": "2026-04-18",
+      "venue": "15 Jalan BM 4/3, Bandar Bukit Mahkota, 43000 Bangi, Selangor, Malaysia",
+      "estAttendance": 0,
+      "distanceKm": 0,
+      "category": "event",
+      "sourceName": "AllEvents",
+      "sourceUrl": "https://allevents.in/bangi/kelas-asas-revolusi-dapur-18-april-2026/200029913082054",
+      "confidence": "high"
+    }
+  ],
+  "droppedUnsourced": 0,
+  "summary": "One public event was identified within the forecast period at a venue in Bandar Bukit Mahkota.",
+  "actions": [
+    {
+      "id": "targeted_measurement",
+      "type": "Verify",
+      "title": "Schedule targeted QoE measurement around the event window",
+      "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+      "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+    },
+    {
+      "id": "baseline_evidence_collection",
+      "type": "Verify",
+      "title": "Collect additional baseline measurement before escalation",
+      "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+      "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+    },
+    {
+      "id": "consumer_information_monitoring",
+      "type": "Monitor",
+      "title": "Monitor consumer complaints and service reports for the period",
+      "detail": "Track complaint and service-report volumes for this area across the window as an independent corroborating signal alongside measurement.",
+      "ituReference": "ITU-T E.800 — Definitions of terms related to quality of service"
+    }
+  ],
+  "note": null
+}

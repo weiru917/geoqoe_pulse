@@ -1,0 +1,20 @@
+{
+  "h3": "8865051095fffff",
+  "forecastQuarter": "2026Q2",
+  "status": "no_context",
+  "retrievedAt": "2026-09-21T07:05:16.574Z",
+  "source": "live",
+  "contextItems": [],
+  "droppedUnsourced": 0,
+  "summary": "No corroborated upcoming context found for this area and period.",
+  "actions": [
+    {
+      "id": "routine_quarterly_review",
+      "type": "Monitor",
+      "title": "Continue routine quarterly review",
+      "detail": "No corroborated scheduled context was found for this area and period. Proceed with the standard quarterly triage pathway already recommended for this cell.",
+      "ituReference": "ITU-T E.802 — Framework and methodologies for the determination and application of QoS parameters"
+    }
+  ],
+  "note": null
+}
