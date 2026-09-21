@@ -1,0 +1,54 @@
+{
+  "h3": "886505ab37fffff",
+  "forecastQuarter": "2026Q2",
+  "status": "context_found",
+  "retrievedAt": "2026-09-21T08:46:29.091Z",
+  "source": "live",
+  "provider": "groq",
+  "searchProvider": "exa",
+  "model": "openai/gpt-oss-120b",
+  "spend": {
+    "turns": 1,
+    "inputTokens": 3661,
+    "outputTokens": 754
+  },
+  "contextItems": [
+    {
+      "name": "Neon Nilavu 2.0",
+      "date": "2026-06-27",
+      "venue": "Moribreeze by the beach, Morib, Selangor",
+      "estAttendance": 0,
+      "distanceKm": 0,
+      "category": "event",
+      "sourceName": "MyTrip Malaysia",
+      "sourceUrl": "https://mytrip.my/neon-nilavu-2-0-2026-malaysias-ultimate-neon-beach-concert-experience-in-banting/",
+      "confidence": "high"
+    }
+  ],
+  "droppedUnsourced": 0,
+  "summary": "One publicly announced concert, Neon Nilavu 2.0, is scheduled for 27 June 2026 at Moribreeze by the beach within the target cell area.",
+  "actions": [
+    {
+      "id": "targeted_measurement",
+      "type": "Verify",
+      "title": "Schedule targeted QoE measurement around the event window",
+      "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+      "ituReference": "ITU-T E.811 (03/2017) — Quality measurement in major events"
+    },
+    {
+      "id": "baseline_evidence_collection",
+      "type": "Verify",
+      "title": "Collect additional baseline measurement before escalation",
+      "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+      "ituReference": "ITU-T E.806 (06/2019) — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+    },
+    {
+      "id": "consumer_information_monitoring",
+      "type": "Monitor",
+      "title": "Monitor consumer complaints and service reports for the period",
+      "detail": "Track complaint and service-report volumes for this area across the window as an independent corroborating signal alongside measurement.",
+      "ituReference": "ITU-T E.800 (09/2008) — Definitions of terms related to quality of service"
+    }
+  ],
+  "note": null
+}
