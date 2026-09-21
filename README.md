@@ -583,10 +583,13 @@ nothing is missing.
   returned; it cannot guarantee that page says what the summary claims. Open
   the source links before quoting an event. Near-duplicate events reported by
   two different sources are not merged.
-- The ITU references attached to suggested actions are transcribed into
-  `dashboard/build/regulator_actions.json` for convenience and are **not**
-  validated by the code. Confirm them against the ITU-T catalogue before
-  presenting them as authority.
+- The ITU references attached to suggested actions were checked against
+  itu.int on 2026-09-21 — E.800, E.802, E.806 and E.811 all exist, are in
+  force, and are quoted verbatim with their approval dates. The code itself
+  does **not** validate these strings, so re-check any you edit in
+  `dashboard/build/regulator_actions.json`. No clause or section numbers are
+  cited, deliberately: they are easy to get wrong and easy for a reviewer to
+  catch.
 - Local context retrieval needs an API key and a network at retrieval time.
   Pre-warmed cells are served from committed JSON and work offline with no
   key; uncached cells return "no corroborated context" instead of an error.

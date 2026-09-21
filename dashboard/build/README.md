@@ -370,9 +370,10 @@ Cached briefs live in `data/context/` and are committed, so a pre-warmed
 dashboard serves its context **with no API key and no network**. Verify each
 source link before presenting it as corroborated.
 
-`ITU` references in `regulator_actions.json` are transcribed for convenience
-and are **not** checked by the code — confirm them against the ITU-T catalogue
-before quoting them.
+The ITU references in `regulator_actions.json` were verified against itu.int
+on 2026-09-21 (E.800, E.802, E.806, E.811 — all in force, titles verbatim,
+approval dates included). The code does not validate these strings, so
+re-check anything you edit there.
 
 ## 5. Testing
 
