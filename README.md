@@ -584,8 +584,9 @@ nothing is missing.
   the source links before quoting an event. Near-duplicate events reported by
   two different sources are not merged.
 - The ITU references attached to suggested actions were checked against
-  itu.int on 2026-09-21 — E.800, E.802, E.806 and E.811 all exist, are in
-  force, and are quoted verbatim with their approval dates. The code itself
+  itu.int on 2026-09-21 — E.800, E.802, E.804, E.806, E.811 and E.860 all
+  exist, are in force, and are quoted verbatim with their approval dates.
+  One distinct Recommendation backs each of the six actions. The code itself
   does **not** validate these strings, so re-check any you edit in
   `dashboard/build/regulator_actions.json`. No clause or section numbers are
   cited, deliberately: they are easy to get wrong and easy for a reviewer to

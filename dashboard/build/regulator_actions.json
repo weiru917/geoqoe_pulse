@@ -12,9 +12,16 @@
     "  E.800 (09/2008)  Definitions of terms related to quality of service",
     "  E.802 (02/2007)  Framework and methodologies for the determination and",
     "                   application of QoS parameters",
+    "  E.804 (02/2014)  Quality of service aspects for popular services in mobile",
+    "                   networks",
     "  E.806 (06/2019)  Measurement campaigns, monitoring systems and sampling",
     "                   methodologies to monitor the QoS in mobile networks",
     "  E.811 (03/2017)  Quality measurement in major events",
+    "  E.860 (06/2002)  Framework of a service level agreement",
+    "",
+    "One Recommendation per action, each chosen for fit rather than convenience.",
+    "If you add an action, do not reuse a reference just because it is already",
+    "here - a loose citation is easier for a reviewer to attack than no citation.",
     "",
     "The code does NOT validate these strings — re-check any you edit, and do not add",
     "clause or section numbers unless you have confirmed them in the published text.",
@@ -43,7 +50,7 @@
       "type": "Coordinate",
       "title": "Request an operator event-readiness plan for the period",
       "detail": "Where a capacity concern is confirmed by the operator, ask for the readiness plan covering the event window. The engineering remedy remains the operator's decision.",
-      "itu_reference": "ITU-T E.811 (03/2017) — Quality measurement in major events",
+      "itu_reference": "ITU-T E.860 (06/2002) — Framework of a service level agreement",
       "applies_when": "High band, corroborated context, and an operator response already confirms a capacity concern."
     },
     {
@@ -67,7 +74,7 @@
       "type": "Monitor",
       "title": "Continue routine quarterly review",
       "detail": "No corroborated scheduled context was found for this area and period. Proceed with the standard quarterly triage pathway already recommended for this cell.",
-      "itu_reference": "ITU-T E.802 (02/2007) — Framework and methodologies for the determination and application of QoS parameters",
+      "itu_reference": "ITU-T E.804 (02/2014) — Quality of service aspects for popular services in mobile networks",
       "applies_when": "No corroborated context was retrieved."
     }
   ]
