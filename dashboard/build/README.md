@@ -314,11 +314,81 @@ numbers and presents them as measured.
 - **How to use this dashboard** — collapsible walkthrough at the top, written
   for a judge seeing this for the first time.
 
+## 4b. Local context retrieval
+
+A **Find local context** button on every card in the Prioritise queue. It
+searches public sources for scheduled events and holidays inside the forecast
+quarter near that cell, then pairs what it finds with up to three regulator
+next-actions.
+
+```
+click → cache hit? → serve from disk (~4 ms)
+         miss      → search API (3 queries, 10 results, 900 chars each)
+                   → language model extracts JSON from those results only
+                   → discard any item whose source URL was not retrieved
+                   → pick <=3 action ids from regulator_actions.json
+                   → cache to data/context/<h3>.json
+```
+
+**Three controls make this presentable to a regulator:**
+
+1. *An event cannot be invented.* Its `source_url` must match a URL the search
+   returned. Anything else is dropped and the count is displayed. A model with
+   no search results produces an empty panel, not a confident list.
+2. *An action or an ITU citation cannot be invented.* The model only selects
+   ids from `regulator_actions.json`; all wording and references are fixed text
+   you control. The catalogue is deliberately procedural (Verify / Request /
+   Coordinate / Monitor) — engineering remedies remain the operator's call.
+3. *Context cannot influence the ranking.* It runs after the forecast, and
+   every brief says so permanently.
+
+**Configuration** — copy `.env.example` to `.env` (gitignored):
+
+```bash
+SEARCH_PROVIDER=exa      # exa | serper | tavily, or blank for provider-native
+EXA_API_KEY=...
+CONTEXT_PROVIDER=groq    # groq | gemini | anthropic | openrouter | perplexity
+GROQ_API_KEY=...
+```
+
+A separate search provider plus a plain chat model is the only configuration
+that runs entirely on free tiers — bundled server-side search is the part every
+LLM free tier withholds. It also bounds the request here rather than letting a
+provider's internal context grow past its own limit.
+
+**Failure is indistinguishable from an empty result by design** — both render
+"No corroborated upcoming context found". Diagnosis goes to the server console
+only, with an actionable hint (rate limit vs. bad key vs. unavailable model).
+
+**Before a demo**, cache the cells you intend to show:
+
+```bash
+node prewarm_context.js --top 10 --delay 3000    # --observed, --dry-run, --refresh
+```
+
+Cached briefs live in `data/context/` and are committed, so a pre-warmed
+dashboard serves its context **with no API key and no network**. Verify each
+source link before presenting it as corroborated.
+
+`ITU` references in `regulator_actions.json` are transcribed for convenience
+and are **not** checked by the code — confirm them against the ITU-T catalogue
+before quoting them.
+
 ## 5. Testing
 
 ```bash
-python3 test_data_pipeline.py
+python3 test_data_pipeline.py          # data pipeline
+
+node test_context_brief.js             # all 5 providers, grounding, actions
+node test_context_retry.js             # retry policy: transient vs permanent
+node test_context_split_search.js      # separate search path end to end
 ```
+
+The three Node suites stub `https.request`, so they make no network calls and
+cost nothing. They cover the parts that fail silently if broken: that an item
+citing an unretrieved URL is discarded, that an invented action id is ignored,
+that a 413/401 fails immediately instead of burning retries, and that the model
+is never asked to search when a search provider is configured.
 
 Seven checks: parquet row counts against `metadata.json`, the
 dictionary-encoded string decode, the anchored/degraded correlation, the

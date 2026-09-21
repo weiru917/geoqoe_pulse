@@ -51,6 +51,35 @@ context** button will not work under it — that button needs a POST route which
 the Python static server cannot answer, so it silently reports "no corroborated
 upcoming context found" for every cell.
 
+## Find local context
+
+Each card in the **Priority investigation queue** carries a **Find local
+context** button. It searches public sources for scheduled events, public
+holidays and school holidays that fall inside the forecast quarter near that
+cell, and suggests up to three next steps drawn from a fixed catalogue of
+regulator actions, each carrying an ITU reference.
+
+The result appears as a collapsible panel under the card. Collapsed, it shows
+how many items were found and the earliest date, so you can scan the queue
+without expanding anything.
+
+Three things to understand before using it in a decision:
+
+- **It runs after the forecast and does not affect the ranking.** Every panel
+  states this. An event listed under a cell is not the model's explanation for
+  why that cell was prioritised.
+- **Every event carries a source link, and unsourced ones are removed.** If the
+  panel says items were discarded, those were claims the retrieval could not
+  tie back to a page it actually read. Open the source links before treating an
+  event as established.
+- **The suggested steps are procedural, not engineering instructions.** They
+  cover verification, information requests and coordination. Deciding how to
+  fix a capacity problem remains the operator's responsibility.
+
+Where a panel reads "No corroborated upcoming context found", nothing
+verifiable was located — which is a valid answer, and also what you will see if
+the dashboard cannot reach its retrieval service.
+
 ## The header and global controls
 
 - **GeoQoE Pulse** — returns your attention to the dashboard identity and study area.
