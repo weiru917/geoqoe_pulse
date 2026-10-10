@@ -1,0 +1,615 @@
+{
+  "886505050dfffff": {
+    "h3": "886505050dfffff",
+    "forecastQuarter": "2026Q2",
+    "status": "no_context",
+    "retrievedAt": "2026-09-21T06:32:04.434Z",
+    "source": "cache",
+    "contextItems": [],
+    "droppedUnsourced": 0,
+    "summary": "No corroborated upcoming context found for this area and period.",
+    "actions": [
+      {
+        "id": "routine_quarterly_review",
+        "type": "Monitor",
+        "title": "Continue routine quarterly review",
+        "detail": "No corroborated scheduled context was found for this area and period. Proceed with the standard quarterly triage pathway already recommended for this cell.",
+        "ituReference": "ITU-T E.802 — Framework and methodologies for the determination and application of QoS parameters"
+      }
+    ],
+    "note": null
+  },
+  "8865051095fffff": {
+    "h3": "8865051095fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "no_context",
+    "retrievedAt": "2026-09-21T07:05:16.574Z",
+    "source": "cache",
+    "contextItems": [],
+    "droppedUnsourced": 0,
+    "summary": "No corroborated upcoming context found for this area and period.",
+    "actions": [
+      {
+        "id": "routine_quarterly_review",
+        "type": "Monitor",
+        "title": "Continue routine quarterly review",
+        "detail": "No corroborated scheduled context was found for this area and period. Proceed with the standard quarterly triage pathway already recommended for this cell.",
+        "ituReference": "ITU-T E.802 — Framework and methodologies for the determination and application of QoS parameters"
+      }
+    ],
+    "note": null
+  },
+  "88650510b1fffff": {
+    "h3": "88650510b1fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "context_found",
+    "retrievedAt": "2026-09-21T08:45:50.412Z",
+    "source": "cache",
+    "provider": "groq",
+    "searchProvider": "exa",
+    "model": "openai/gpt-oss-120b",
+    "spend": {
+      "turns": 1,
+      "inputTokens": 3938,
+      "outputTokens": 1033
+    },
+    "contextItems": [
+      {
+        "name": "EON & SAHABAT AUTOFEST 2026",
+        "date": "2026-05-08",
+        "venue": "No 1, Jalan Suasa, Kawasan Perusahaan Banting, 42700 Banting, Malaysia (Dengkil)",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "AllEvents",
+        "sourceUrl": "https://allevents.in/dengkil/eon-and-sahabat-autofest-2026/200029982058300",
+        "confidence": "high"
+      }
+    ],
+    "droppedUnsourced": 0,
+    "summary": "A publicly announced EON & SAHABAT AUTOFEST is scheduled for 8 May 2026 in the Dengkil industrial area, occurring within the forecast period and near the cell location.",
+    "actions": [
+      {
+        "id": "targeted_measurement",
+        "type": "Verify",
+        "title": "Schedule targeted QoE measurement around the event window",
+        "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+        "ituReference": "ITU-T E.811 (03/2017) — Quality measurement in major events"
+      },
+      {
+        "id": "baseline_evidence_collection",
+        "type": "Verify",
+        "title": "Collect additional baseline measurement before escalation",
+        "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+        "ituReference": "ITU-T E.806 (06/2019) — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      },
+      {
+        "id": "consumer_information_monitoring",
+        "type": "Monitor",
+        "title": "Monitor consumer complaints and service reports for the period",
+        "detail": "Track complaint and service-report volumes for this area across the window as an independent corroborating signal alongside measurement.",
+        "ituReference": "ITU-T E.800 (09/2008) — Definitions of terms related to quality of service"
+      }
+    ],
+    "note": null
+  },
+  "88650510cbfffff": {
+    "h3": "88650510cbfffff",
+    "forecastQuarter": "2026Q2",
+    "status": "no_context",
+    "retrievedAt": "2026-09-21T07:05:15.858Z",
+    "source": "cache",
+    "contextItems": [],
+    "droppedUnsourced": 0,
+    "summary": "No corroborated upcoming context found for this area and period.",
+    "actions": [
+      {
+        "id": "routine_quarterly_review",
+        "type": "Monitor",
+        "title": "Continue routine quarterly review",
+        "detail": "No corroborated scheduled context was found for this area and period. Proceed with the standard quarterly triage pathway already recommended for this cell.",
+        "ituReference": "ITU-T E.802 — Framework and methodologies for the determination and application of QoS parameters"
+      }
+    ],
+    "note": null
+  },
+  "88650511a1fffff": {
+    "h3": "88650511a1fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "context_found",
+    "retrievedAt": "2026-09-21T08:43:58.524Z",
+    "source": "cache",
+    "provider": "groq",
+    "searchProvider": "exa",
+    "model": "openai/gpt-oss-120b",
+    "spend": {
+      "turns": 1,
+      "inputTokens": 3567,
+      "outputTokens": 1146
+    },
+    "contextItems": [
+      {
+        "name": "Kelas Asas REVOLUSI DAPUR",
+        "date": "2026-04-18",
+        "venue": "15, Jalan BM 4/3, Bandar Bukit Mahkota, 43000 Bangi, Selangor, Malaysia",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "AllEvents",
+        "sourceUrl": "https://allevents.in/bangi/kelas-asas-revolusi-dapur-18-april-2026/200029913082054",
+        "confidence": "high"
+      }
+    ],
+    "droppedUnsourced": 0,
+    "summary": "One public class event scheduled for 18 April 2026 is listed within Bandar Bukit Mahkota.",
+    "actions": [
+      {
+        "id": "targeted_measurement",
+        "type": "Verify",
+        "title": "Schedule targeted QoE measurement around the event window",
+        "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+        "ituReference": "ITU-T E.811 (03/2017) — Quality measurement in major events"
+      },
+      {
+        "id": "baseline_evidence_collection",
+        "type": "Verify",
+        "title": "Collect additional baseline measurement before escalation",
+        "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+        "ituReference": "ITU-T E.806 (06/2019) — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      }
+    ],
+    "note": null
+  },
+  "8865051a63fffff": {
+    "h3": "8865051a63fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "context_found",
+    "retrievedAt": "2026-09-21T06:49:32.719Z",
+    "source": "cache",
+    "provider": "groq",
+    "searchProvider": "exa",
+    "model": "openai/gpt-oss-120b",
+    "spend": {
+      "turns": 1,
+      "inputTokens": 3548,
+      "outputTokens": 953
+    },
+    "contextItems": [
+      {
+        "name": "Konsert Gala Alumni Melodi Sepanjang Zaman 2026",
+        "date": "2026-06-20",
+        "venue": "Dewan Canselor Tun Abdul Razak (DECTAR), Off Jalan Bunga Raya, 43600 Bangi, Selangor, Malaysia",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "MyTrip Malaysia",
+        "sourceUrl": "https://mytrip.my/konsert-gala-alumni-melodi-sepanjang-zaman-2026/",
+        "confidence": "high"
+      },
+      {
+        "name": "20th Concert of Chinese Traditional Orchestra ARTISUKMA UKM",
+        "date": "2026-06-14",
+        "venue": "Pusat Siswazah UKM, Universiti Kebangsaan Malaysia, Jalan Reko Bangi, 43600 Bangi, Selangor, Malaysia",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "KL Events Calendar",
+        "sourceUrl": "https://kleventscalendar.my/event/20th-concert-of-chinese-traditional-orchestra-artisukma-ukm/",
+        "confidence": "high"
+      }
+    ],
+    "droppedUnsourced": 0,
+    "summary": "Two publicly announced concerts are scheduled in Bangi during the forecast quarter: a gala alumni concert on 20 June and a Chinese traditional orchestra concert on 14 June, both at local university venues.",
+    "actions": [
+      {
+        "id": "targeted_measurement",
+        "type": "Verify",
+        "title": "Schedule targeted QoE measurement around the event window",
+        "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+        "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      },
+      {
+        "id": "baseline_evidence_collection",
+        "type": "Verify",
+        "title": "Collect additional baseline measurement before escalation",
+        "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+        "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      }
+    ],
+    "note": null
+  },
+  "8865051a67fffff": {
+    "h3": "8865051a67fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "context_found",
+    "retrievedAt": "2026-09-21T07:02:18.212Z",
+    "source": "cache",
+    "provider": "groq",
+    "searchProvider": "exa",
+    "model": "openai/gpt-oss-120b",
+    "spend": {
+      "turns": 1,
+      "inputTokens": 3703,
+      "outputTokens": 1099
+    },
+    "contextItems": [
+      {
+        "name": "Konsert Gala Alumni Melodi Sepanjang Zaman",
+        "date": "20 June 2026",
+        "venue": "Chancellor Tun Abdul Razak Hall, Dewan Canselor Tun Abdul Razak (DECTAR), Jalan Bunga Raya, Bangi, Selangor, Malaysia",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "Ticket2u",
+        "sourceUrl": "https://www.ticket2u.com.my/event/50150/konsert-gala-alumni-melodi-sepanjang-zaman",
+        "confidence": "high"
+      }
+    ],
+    "droppedUnsourced": 0,
+    "summary": "One publicly announced concert was found within the forecast quarter and near the target cell: the Konsert Gala Alumni Melodi Sepanjang Zaman on 20 June 2026 at Chancellor Tun Abdul Razak Hall in Bangi.",
+    "actions": [
+      {
+        "id": "targeted_measurement",
+        "type": "Verify",
+        "title": "Schedule targeted QoE measurement around the event window",
+        "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+        "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      },
+      {
+        "id": "baseline_evidence_collection",
+        "type": "Verify",
+        "title": "Collect additional baseline measurement before escalation",
+        "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+        "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      }
+    ],
+    "note": null
+  },
+  "8865051a87fffff": {
+    "h3": "8865051a87fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "context_found",
+    "retrievedAt": "2026-09-21T05:07:51.721Z",
+    "source": "cache",
+    "provider": "groq",
+    "searchProvider": "exa",
+    "model": "openai/gpt-oss-120b",
+    "spend": {
+      "turns": 1,
+      "inputTokens": 3398,
+      "outputTokens": 991
+    },
+    "contextItems": [
+      {
+        "name": "Kelas Asas REVOLUSI DAPUR",
+        "date": "2026-04-18",
+        "venue": "15 Jalan BM 4/3, Bandar Bukit Mahkota, 43000 Bangi, Selangor, Malaysia",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "AllEvents",
+        "sourceUrl": "https://allevents.in/bangi/kelas-asas-revolusi-dapur-18-april-2026/200029913082054",
+        "confidence": "high"
+      }
+    ],
+    "droppedUnsourced": 0,
+    "summary": "One public event was identified within the forecast period at a venue in Bandar Bukit Mahkota.",
+    "actions": [
+      {
+        "id": "targeted_measurement",
+        "type": "Verify",
+        "title": "Schedule targeted QoE measurement around the event window",
+        "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+        "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      },
+      {
+        "id": "baseline_evidence_collection",
+        "type": "Verify",
+        "title": "Collect additional baseline measurement before escalation",
+        "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+        "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      },
+      {
+        "id": "consumer_information_monitoring",
+        "type": "Monitor",
+        "title": "Monitor consumer complaints and service reports for the period",
+        "detail": "Track complaint and service-report volumes for this area across the window as an independent corroborating signal alongside measurement.",
+        "ituReference": "ITU-T E.800 — Definitions of terms related to quality of service"
+      }
+    ],
+    "note": null
+  },
+  "8865051ad1fffff": {
+    "h3": "8865051ad1fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "context_found",
+    "retrievedAt": "2026-09-21T08:44:09.801Z",
+    "source": "cache",
+    "provider": "groq",
+    "searchProvider": "exa",
+    "model": "openai/gpt-oss-120b",
+    "spend": {
+      "turns": 1,
+      "inputTokens": 3567,
+      "outputTokens": 1170
+    },
+    "contextItems": [
+      {
+        "name": "Kelas Asas REVOLUSI DAPUR",
+        "date": "2026-04-18",
+        "venue": "15, Jalan BM 4/3, Bandar Bukit Mahkota, Bangi, Selangor, Malaysia",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "AllEvents",
+        "sourceUrl": "https://allevents.in/bangi/kelas-asas-revolusi-dapur-18-april-2026/200029913082054",
+        "confidence": "high"
+      }
+    ],
+    "droppedUnsourced": 0,
+    "summary": "One scheduled public event (a cooking class) was identified within the forecast quarter at an address in Bandar Bukit Mahkota.",
+    "actions": [
+      {
+        "id": "targeted_measurement",
+        "type": "Verify",
+        "title": "Schedule targeted QoE measurement around the event window",
+        "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+        "ituReference": "ITU-T E.811 (03/2017) — Quality measurement in major events"
+      },
+      {
+        "id": "baseline_evidence_collection",
+        "type": "Verify",
+        "title": "Collect additional baseline measurement before escalation",
+        "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+        "ituReference": "ITU-T E.806 (06/2019) — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      }
+    ],
+    "note": null
+  },
+  "88650542e9fffff": {
+    "h3": "88650542e9fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "context_found",
+    "retrievedAt": "2026-09-21T06:32:21.722Z",
+    "source": "cache",
+    "provider": "groq",
+    "searchProvider": "exa",
+    "model": "openai/gpt-oss-120b",
+    "spend": {
+      "turns": 1,
+      "inputTokens": 3316,
+      "outputTokens": 1386
+    },
+    "contextItems": [
+      {
+        "name": "Zoo Negara Multi‑Animal Show",
+        "date": "Weekdays (Mon‑Fri) 11:00 AM & 3:00 PM, 2026‑04‑01 to 2026‑06‑30",
+        "venue": "Zoo Negara Amphitheatre, 5, Jalan Taman Zooview, Taman Zooview, 68000 Ampang, Selangor",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "UAK Travel",
+        "sourceUrl": "https://uaktravel.com/amphitheater-show-animal-show-zoo-negara",
+        "confidence": "high"
+      },
+      {
+        "name": "Zoo Negara Multi‑Animal Show (Facebook announcement)",
+        "date": "Weekdays (Mon‑Fri) 11:00 AM & 3:00 PM, 2026‑04‑01 to 2026‑06‑30",
+        "venue": "Zoo Negara Amphitheatre, Ampang, Selangor",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "Zoo Negara Facebook",
+        "sourceUrl": "https://www.facebook.com/znegaramalaysia/videos/come-visit-our-multi-animal-show-it-opens-daily-and-closes-on-fridays-except-for/1135216747497977/",
+        "confidence": "high"
+      }
+    ],
+    "droppedUnsourced": 0,
+    "summary": "Two publicly announced recurring animal shows are scheduled at Zoo Negara Amphitheatre on weekdays throughout the forecast quarter.",
+    "actions": [
+      {
+        "id": "targeted_measurement",
+        "type": "Verify",
+        "title": "Schedule targeted QoE measurement around the event window",
+        "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+        "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      },
+      {
+        "id": "baseline_evidence_collection",
+        "type": "Verify",
+        "title": "Collect additional baseline measurement before escalation",
+        "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+        "ituReference": "ITU-T E.806 — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      }
+    ],
+    "note": null
+  },
+  "8865056001fffff": {
+    "h3": "8865056001fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "no_context",
+    "retrievedAt": "2026-09-21T08:44:39.127Z",
+    "source": "cache",
+    "contextItems": [],
+    "droppedUnsourced": 0,
+    "summary": "No corroborated upcoming context found for this area and period.",
+    "actions": [
+      {
+        "id": "routine_quarterly_review",
+        "type": "Monitor",
+        "title": "Continue routine quarterly review",
+        "detail": "No corroborated scheduled context was found for this area and period. Proceed with the standard quarterly triage pathway already recommended for this cell.",
+        "ituReference": "ITU-T E.804 (02/2014) — Quality of service aspects for popular services in mobile networks"
+      }
+    ],
+    "note": null
+  },
+  "88650574d5fffff": {
+    "h3": "88650574d5fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "no_context",
+    "retrievedAt": "2026-09-21T08:47:01.803Z",
+    "source": "cache",
+    "contextItems": [],
+    "droppedUnsourced": 0,
+    "summary": "No corroborated upcoming context found for this area and period.",
+    "actions": [
+      {
+        "id": "routine_quarterly_review",
+        "type": "Monitor",
+        "title": "Continue routine quarterly review",
+        "detail": "No corroborated scheduled context was found for this area and period. Proceed with the standard quarterly triage pathway already recommended for this cell.",
+        "ituReference": "ITU-T E.804 (02/2014) — Quality of service aspects for popular services in mobile networks"
+      }
+    ],
+    "note": null
+  },
+  "886505789dfffff": {
+    "h3": "886505789dfffff",
+    "forecastQuarter": "2026Q2",
+    "status": "no_context",
+    "retrievedAt": "2026-09-21T08:45:17.969Z",
+    "source": "cache",
+    "contextItems": [],
+    "droppedUnsourced": 0,
+    "summary": "No corroborated upcoming context found for this area and period.",
+    "actions": [
+      {
+        "id": "routine_quarterly_review",
+        "type": "Monitor",
+        "title": "Continue routine quarterly review",
+        "detail": "No corroborated scheduled context was found for this area and period. Proceed with the standard quarterly triage pathway already recommended for this cell.",
+        "ituReference": "ITU-T E.804 (02/2014) — Quality of service aspects for popular services in mobile networks"
+      }
+    ],
+    "note": null
+  },
+  "886505ab37fffff": {
+    "h3": "886505ab37fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "context_found",
+    "retrievedAt": "2026-09-21T08:46:29.091Z",
+    "source": "cache",
+    "provider": "groq",
+    "searchProvider": "exa",
+    "model": "openai/gpt-oss-120b",
+    "spend": {
+      "turns": 1,
+      "inputTokens": 3661,
+      "outputTokens": 754
+    },
+    "contextItems": [
+      {
+        "name": "Neon Nilavu 2.0",
+        "date": "2026-06-27",
+        "venue": "Moribreeze by the beach, Morib, Selangor",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "MyTrip Malaysia",
+        "sourceUrl": "https://mytrip.my/neon-nilavu-2-0-2026-malaysias-ultimate-neon-beach-concert-experience-in-banting/",
+        "confidence": "high"
+      }
+    ],
+    "droppedUnsourced": 0,
+    "summary": "One publicly announced concert, Neon Nilavu 2.0, is scheduled for 27 June 2026 at Moribreeze by the beach within the target cell area.",
+    "actions": [
+      {
+        "id": "targeted_measurement",
+        "type": "Verify",
+        "title": "Schedule targeted QoE measurement around the event window",
+        "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+        "ituReference": "ITU-T E.811 (03/2017) — Quality measurement in major events"
+      },
+      {
+        "id": "baseline_evidence_collection",
+        "type": "Verify",
+        "title": "Collect additional baseline measurement before escalation",
+        "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+        "ituReference": "ITU-T E.806 (06/2019) — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      },
+      {
+        "id": "consumer_information_monitoring",
+        "type": "Monitor",
+        "title": "Monitor consumer complaints and service reports for the period",
+        "detail": "Track complaint and service-report volumes for this area across the window as an independent corroborating signal alongside measurement.",
+        "ituReference": "ITU-T E.800 (09/2008) — Definitions of terms related to quality of service"
+      }
+    ],
+    "note": null
+  },
+  "886505ccb7fffff": {
+    "h3": "886505ccb7fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "no_context",
+    "retrievedAt": "2026-09-21T06:50:18.555Z",
+    "source": "cache",
+    "contextItems": [],
+    "droppedUnsourced": 0,
+    "summary": "No corroborated upcoming context found for this area and period.",
+    "actions": [
+      {
+        "id": "routine_quarterly_review",
+        "type": "Monitor",
+        "title": "Continue routine quarterly review",
+        "detail": "No corroborated scheduled context was found for this area and period. Proceed with the standard quarterly triage pathway already recommended for this cell.",
+        "ituReference": "ITU-T E.802 — Framework and methodologies for the determination and application of QoS parameters"
+      }
+    ],
+    "note": null
+  },
+  "886505ce83fffff": {
+    "h3": "886505ce83fffff",
+    "forecastQuarter": "2026Q2",
+    "status": "context_found",
+    "retrievedAt": "2026-09-21T08:47:33.608Z",
+    "source": "cache",
+    "provider": "groq",
+    "searchProvider": "exa",
+    "model": "openai/gpt-oss-120b",
+    "spend": {
+      "turns": 1,
+      "inputTokens": 3518,
+      "outputTokens": 1120
+    },
+    "contextItems": [
+      {
+        "name": "Temu Janji Community Market",
+        "date": "20 June 2026 – 28 June 2026",
+        "venue": "Setia Ecohill Walk, Semenyih",
+        "estAttendance": 0,
+        "distanceKm": 0,
+        "category": "event",
+        "sourceName": "Caritapak",
+        "sourceUrl": "https://caritapak.my/event/temu-janji-community-market2",
+        "confidence": "high"
+      }
+    ],
+    "droppedUnsourced": 0,
+    "summary": "One publicly announced market event (Temu Janji Community Market) is scheduled in Semenyih during the forecast quarter. No other verified events, holidays, or transport activities were found within the required radius.",
+    "actions": [
+      {
+        "id": "targeted_measurement",
+        "type": "Verify",
+        "title": "Schedule targeted QoE measurement around the event window",
+        "detail": "Plan regulator-side measurement at this location before, during and after the identified period so any change is observed rather than inferred.",
+        "ituReference": "ITU-T E.811 (03/2017) — Quality measurement in major events"
+      },
+      {
+        "id": "baseline_evidence_collection",
+        "type": "Verify",
+        "title": "Collect additional baseline measurement before escalation",
+        "detail": "Measurement support for this cell is limited. Establish a defensible baseline before any operator escalation so the comparison is sound.",
+        "ituReference": "ITU-T E.806 (06/2019) — Measurement campaigns, monitoring systems and sampling methodologies to monitor the quality of service in mobile networks"
+      },
+      {
+        "id": "consumer_information_monitoring",
+        "type": "Monitor",
+        "title": "Monitor consumer complaints and service reports for the period",
+        "detail": "Track complaint and service-report volumes for this area across the window as an independent corroborating signal alongside measurement.",
+        "ituReference": "ITU-T E.800 (09/2008) — Definitions of terms related to quality of service"
+      }
+    ],
+    "note": null
+  }
+}

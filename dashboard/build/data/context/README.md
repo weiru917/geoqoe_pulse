@@ -31,3 +31,12 @@ these briefs as verified. Delete the file to discard a brief and search again.
 
 Committing the verified files is intentional: it makes the demo reproducible and lets a
 reviewer check the same sources you did.
+
+## Saved-only public demo
+
+The dashboard's live-search actions are disabled by default. Run
+`node dashboard/build/build_static_site.js` from the repository root after
+editing briefs. It aggregates the individual files into `index.json` and
+creates a static publication package; the browser reads this JSON directly,
+without a server or provider credentials. Saved retrieval dates, source URLs,
+actions and manual-compilation provenance are preserved.

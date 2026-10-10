@@ -16,6 +16,7 @@ data/raw/*
 .DS_Store
 Thumbs.db
 *.tmp
+/.pages-site/
 
 # Redundant root-level dashboard exports (canonical copies live in dashboard/build/data)
 /data/city_timeseries.json

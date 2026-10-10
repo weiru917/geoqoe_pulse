@@ -70,7 +70,8 @@ function handleContextCache(res) {
   let files = [];
   try { files = fs.readdirSync(dir); } catch { /* no cache yet */ }
   for (const name of files) {
-    if (!name.endsWith(".json") || name.startsWith("_")) continue;
+    // The static index aggregates cells; it is not itself a cell brief.
+    if (!/^[0-9a-f]{15}\.json$/.test(name)) continue;
     try {
       const brief = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8"));
       const h3 = brief.h3 || name.replace(/\.json$/, "");

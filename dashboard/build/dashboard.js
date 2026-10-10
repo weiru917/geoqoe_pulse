@@ -63,6 +63,8 @@ const state = {
   contextBriefs: {},       // h3_index -> retrieved scheduled-event context brief
   contextBriefLoading: new Set(),
   contextBriefOpen: new Set(),   // h3 of briefs expanded in the queue
+  contextBriefsLoaded: false,
+  contextBriefLoadFailed: false,
   profile: "balanced",      // QoE weighting profile — see PROFILE_WEIGHTS
   whatIfEnabled: false,
   whatIfPct: 20,            // -50..+100, % capacity change
@@ -2803,6 +2805,9 @@ function setQuarterlyTriageFilter(value) {
 // ---------------------------------------------------------------------------
 
 const CONTEXT_BRIEF_ENDPOINT = "./api/context-brief";
+// Public demos use saved briefs only. No model/search credentials or backend
+// are needed. Live retrieval tooling remains available for local pre-warming.
+const LIVE_CONTEXT_ENABLED = false;
 
 function contextBriefPayload(h3) {
   const row = quarterlyRecordForH3(h3);
@@ -2836,33 +2841,31 @@ function contextBriefPayload(h3) {
   };
 }
 
-// Pull every already-cached brief in one request at startup, so pre-warmed
-// cells show their context with no click. Deliberately fire-and-forget: the
-// dashboard must render normally whether or not this succeeds, and cells that
-// are NOT cached keep the "Find local context" button so live retrieval can
-// still be demonstrated (and used) on any other cell.
+// Load the published saved briefs using a relative path, including when the
+// dashboard is served under a GitHub Pages project subdirectory.
 async function loadCachedContextBriefs() {
   try {
-    const res = await fetch("./api/context-cache");
-    if (!res.ok) return;
+    const res = await fetch(LIVE_CONTEXT_ENABLED ? "./api/context-cache" : "./data/context/index.json");
+    if (!res.ok) throw new Error(`Context HTTP ${res.status}`);
     const briefs = await res.json();
-    let loaded = 0;
     for (const [h3, brief] of Object.entries(briefs || {})) {
       // Never clobber something retrieved live in this session.
       if (state.contextBriefs[h3]) continue;
-      state.contextBriefs[h3] = brief;
-      loaded++;
-    }
-    if (loaded) {
-      Object.keys(briefs).forEach(paintContextBrief);
-      if (document.getElementById("quarterlyPriorityList")?.children.length) renderQuarterlyQueue();
+      state.contextBriefs[h3] = { ...brief, source: brief.source === "manual" ? "manual" : "cache" };
     }
   } catch {
-    // Static server, or no cache directory — the button path still works.
+    state.contextBriefLoadFailed = true;
+  } finally {
+    state.contextBriefsLoaded = true;
+    document.querySelectorAll(".context-brief-host").forEach(host => {
+      host.innerHTML = contextBriefHtml(host.id.replace("contextBrief-", ""));
+    });
+    if (document.getElementById("quarterlyPriorityList")?.children.length) renderQuarterlyQueue();
   }
 }
 
 async function findLocalContext(h3, refresh = false) {
+  if (!LIVE_CONTEXT_ENABLED) return;
   if (state.contextBriefLoading.has(h3)) return;
   state.contextBriefLoading.add(h3);
   paintContextBrief(h3);
@@ -2932,6 +2935,10 @@ function contextBriefHtml(h3) {
     return `<div class="context-brief is-loading"><span class="context-spinner" aria-hidden="true"></span><div><b>Searching public sources…</b><small>Looking for scheduled events and holidays in the forecast window. This can take up to a minute.</small></div></div>`;
   }
   if (!brief) {
+    if (!LIVE_CONTEXT_ENABLED) {
+      const message = !state.contextBriefsLoaded ? "Loading saved context…" : state.contextBriefLoadFailed ? "Saved context could not load. Refresh the page to try again." : "No saved context brief is available for this area.";
+      return `<div class="context-handoff"><b>Saved context</b><small>${message}</small></div>`;
+    }
     return `<div class="context-handoff"><button class="btn btn-sm btn-outline-primary" onclick="findLocalContext('${h3}')"><i class="bi bi-search"></i> Find local context</button><small>Search public sources for events and holidays in the forecast quarter, then suggest ITU-referenced next steps</small></div>`;
   }
 
@@ -2942,6 +2949,7 @@ function contextBriefHtml(h3) {
   // point of the badge is that a reader can trust where the context came from.
   const manual = brief.source === "manual";
   const sourceChip = manual ? "MANUALLY COMPILED"
+    : !LIVE_CONTEXT_ENABLED ? "SAVED CONTEXT"
     : brief.source === "cache" ? "RETRIEVED &amp; VERIFIED"
     : brief.source === "live" ? "RETRIEVED LIVE" : "NOT RETRIEVED";
   const datedLabel = manual ? "Compiled" : "Retrieved";
@@ -2986,7 +2994,7 @@ function contextBriefHtml(h3) {
       <span class="context-retrieved">${datedLabel} ${escapeHtml(retrieved)}</span>
     </summary>
     <div class="context-brief-body">
-      <div class="context-brief-head"><span class="context-source-chip">${sourceChip}</span><button class="context-refresh" onclick="findLocalContext('${h3}', true)" title="Search public sources again"><i class="bi bi-arrow-clockwise"></i> Search again</button></div>
+      <div class="context-brief-head"><span class="context-source-chip">${sourceChip}</span>${LIVE_CONTEXT_ENABLED ? `<button class="context-refresh" onclick="findLocalContext('${h3}', true)" title="Search public sources again"><i class="bi bi-arrow-clockwise"></i> Search again</button>` : ""}</div>
       ${found && brief.summary ? `<p class="context-summary">${escapeHtml(brief.summary)}</p>` : ""}
       <div class="context-block"><span class="context-block-label">Public scheduled context</span>${itemsHtml}</div>
       ${brief.droppedUnsourced ? `<p class="context-dropped"><i class="bi bi-funnel"></i>${brief.droppedUnsourced} candidate item(s) were discarded because no retrieved source corroborated them.</p>` : ""}

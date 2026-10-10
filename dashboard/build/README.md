@@ -247,19 +247,49 @@ already sitting in `ai_model/` or the pipeline output — nothing fabricated:
 
 ## 2. Run it
 
+### Saved-context demo and free static hosting
+
+The dashboard now defaults to saved context only. It loads
+`data/context/index.json` directly and shows saved source links, dates and
+ITU-referenced actions. There are no live-search or refresh buttons; cells
+without a saved brief are labelled accordingly. This does not change the
+forecast, risk ranks, SHAP explanations or map data.
+
+Build a dashboard-only publication package from the repository root:
+
 ```bash
-# Node (recommended - required for local context retrieval)
+node dashboard/build/build_static_site.js
+```
+
+This refreshes the saved-context index and creates `.pages-site/` with only
+the browser assets, required dashboard JSON, aggregated context and a GitHub
+Pages workflow. It excludes server code, credentials, source datasets and
+research/training scripts. Re-run it whenever you update saved briefs.
+
+For GitHub Free, publish this package in a separate **public** repository
+if the main research repository should remain private. In the public repo,
+choose **Settings → Pages → Source: GitHub Actions**, then run **Actions →
+Deploy dashboard → Run workflow**. Later pushes to its `main` branch
+deploy automatically. The URL is `https://<owner>.github.io/<public-repo>/`.
+No Node server or AI/search API credentials are needed on GitHub Pages.
+
+The private repo can still be previewed locally with Node. The context APIs
+and pre-warming scripts remain available for preparing briefs locally, but
+the dashboard's `LIVE_CONTEXT_ENABLED` flag is `false` by default.
+
+```bash
+# Node local preview (saved context needs no API credentials)
 node server.js 3000
 
 # Docker (see Dockerfile; build once data/ exists)
 docker build -t geoqoe-pulse .
 docker run --rm -p 3000:3000 --env-file .env geoqoe-pulse
 
-# Python - STATIC ONLY, see the warning below
+# Python static preview (works with saved context)
 python3 -m http.server 3000
 ```
 
-> **Use `node server.js` if you want the "Find local context" button to work.**
+> **If you explicitly re-enable live context, use `node server.js`.**
 > Python's `http.server` cannot serve the `POST /api/context-brief` route — it
 > answers `501 Unsupported method`. The dashboard handles that gracefully, which
 > is the problem: the button returns "No corroborated upcoming context found"
@@ -366,7 +396,13 @@ numbers and presents them as measured.
 
 ## 4b. Local context retrieval
 
-A **Find local context** button on every card in the Prioritise queue. It
+This section describes optional local pre-warming or an explicitly re-enabled
+live dashboard. The public static demo uses saved briefs only and has no
+live-search buttons. After preparing or editing briefs, rebuild the static
+package to refresh its index.
+
+When live mode is explicitly enabled, a **Find local context** button on each
+uncached card in the Prioritise queue
 searches public sources for scheduled events and holidays inside the forecast
 quarter near that cell, then pairs what it finds with up to three regulator
 next-actions.
