@@ -112,11 +112,9 @@ node server.js 3000
 Then open **http://localhost:3000** in a browser. Node ships a zero-dependency
 server in this repo — nothing to install.
 
-> **Use Node, not `python3 -m http.server`.** The Python static server cannot
-> answer the `POST /api/context-brief` route that the **Find local context**
-> button needs, so that button silently reports "no corroborated upcoming
-> context found" for every cell — indistinguishable from a genuine empty
-> result. Everything else on the dashboard works fine under Python.
+The dashboard uses saved context by default; live AI/search is disabled.
+Node or a static HTTP server can serve this version. Re-enabling live
+context requires the Node API server and its credentials.
 
 Other options:
 
@@ -125,13 +123,42 @@ Other options:
 docker build -t geoqoe-pulse .
 docker run --rm -p 3000:3000 --env-file .env geoqoe-pulse
 
-# Python - static only, see the warning above
+# Python - serve the saved-context dashboard
+cd dashboard/build
 python3 -m http.server 3000
 ```
 
 > Opening `dashboard/build/index.html` directly by double-clicking it will
 > **not** work — browsers block the page from loading its data files that
 > way, hence the small local server above.
+
+### Free deployment with GitHub Pages
+
+For the existing `weiru917/geoqoe_pulse` repository, the workflow in
+`.github/workflows/pages.yml` packages the dashboard from `dashboard/build`
+and publishes `.pages-site`. It includes saved context and the required
+dashboard data, without the server, credentials, or pipeline dataset.
+
+1. Make the repository public under **Settings → General → Danger Zone →
+   Change repository visibility**. This makes all tracked files and Git
+   history in the GitHub repository publicly visible. GitHub Free requires
+   a public repository for Pages.
+2. Open **Settings → Pages** and select **GitHub Actions** as the source.
+3. Open **Actions → Deploy dashboard → Run workflow**, select `main`, and
+   run it. Subsequent dashboard commits on `main` deploy automatically.
+
+After the workflow succeeds, the dashboard is available at
+**https://weiru917.github.io/geoqoe_pulse/**. Pages has no custom Root
+Directory field; this workflow chooses the publication folder.
+CollabHub is separate and is not changed by these steps.
+
+To keep the research repository private, a separate public dashboard
+repository can instead use the generated `.pages-site` package, which
+includes its own workflow. Generate it with:
+
+```bash
+node dashboard/build/build_static_site.js
+```
 
 ### 3.1 Recommended dashboard workflow
 
