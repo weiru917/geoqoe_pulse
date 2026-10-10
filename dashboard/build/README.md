@@ -32,6 +32,56 @@ onset XGBoost model, both evaluated on real held-out data. See section 1b.
 
 ## 0. Placement
 
+### Map presentation modes
+
+The map has three presentation styles over the same data:
+
+- **Clean 2D** is the default. Muted normal areas and fine boundaries keep
+  flagged cells and place labels readable.
+- **3D city** shows OSM-derived building models from OpenFreeMap and
+  elevation-based terrain from Mapzen's Terrarium tiles on AWS Open Data.
+  It opens at building-scale zoom around the selected cell, or downtown KL
+  if no cell is selected. **KL skyline** returns to the downtown view.
+  Buildings and terrain have independent switches; terrain uses true scale
+  (no elevation exaggeration). Building coverage and height detail vary by
+  source; these are footprint-based models, not photographic 3D scans.
+  Network colours are shown on the ground by default so the city is visible.
+  **Data columns** adds hollow, translucent hexagon walls with an open centre
+  and no solid roof, so buildings remain visible. **Column opacity** adjusts
+  their opacity from 5–40% (18% by default), including the selected top rim.
+  Column display heights use 22% of the original scale to reduce occlusion;
+  ground colours, exact cell footprints and analysis values are unchanged. High
+  forecast bands rise above Elevated; Lower stays flat. Existing observed
+  issues have a separate fixed height in Combined view. Data-column heights
+  are illustrative, not building heights, terrain or probabilities.
+  Categorical outcome and Moran maps use equal-height data columns.
+  Buildings use a blue/teal height palette and directional shading for stronger
+  contrast; these decorative building colours do not encode network risk.
+- **Heatmap** smooths the concentration of active signals. It is zoom-dependent
+  and does not run a new statistical hotspot test. Categorical Moran,
+  comparison and revealed quarterly-outcome views retain 2D / 3D instead.
+  Select a location to inspect exact cell evidence.
+
+**Layers → Basemap** offers Quiet canvas, Street map and Satellite imagery.
+**Overview** returns to the regional extent; 3D adds rotate and tilt controls.
+Buildings appear when zoomed in (zoom 13.5 or higher); the skyline shortcut
+opens at zoom 15.5. A status line reports loading, unavailable tiles, or
+areas with no mapped buildings. Failed environment tiles do not remove
+the network layers; switching to Heatmap disables terrain and buildings.
+Search, list navigation, cell selection and comparison use the existing
+Cell Intelligence workflow. Tower and rain overlays remain available in 2D.
+
+MapLibre is pinned to version 5.6.0 and loaded from UNPKG. The map needs a
+WebGL-capable browser and a network connection for the library and basemap
+tiles. If 3D cannot initialise, the dashboard keeps Clean 2D available and
+shows a visible explanation. No new map API key or Python build is required.
+The Dockerfile includes all presentation assets.
+
+Geographic sources: [OpenFreeMap](https://openfreemap.org/quick_start/) and
+[Terrain Tiles](https://registry.opendata.aws/terrain-tiles/). Source
+attribution is included in the map. These geographic layers add context;
+they do not change the quarterly forecast or infer network coverage.
+
 This folder sits at `dashboard/build/` inside the
 `geoqoe_pulse` repo; its build script resolves inputs from the repository root — it's
 already been generated once against your real pipeline output, so:

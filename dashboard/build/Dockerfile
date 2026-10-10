@@ -26,6 +26,7 @@ WORKDIR /app
 
 # Only what's needed to serve the dashboard — no pip/pandas/geopandas here.
 COPY index.html dashboard.css dashboard.js server.js ./
+COPY operator-theme.css map-experience.css map-experience.js ./
 # Server-side context retrieval. Without these the server cannot start:
 # server.js require()s context_brief.js on the first line.
 COPY context_brief.js regulator_actions.json ./

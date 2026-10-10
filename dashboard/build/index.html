@@ -13,6 +13,8 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <link rel="stylesheet" href="dashboard.css">
  <link rel="stylesheet" href="operator-theme.css?v=control-contrast-2">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="map-experience.css">
 </head>
 <body>
 
@@ -175,7 +177,7 @@
           <summary><i class="bi bi-layers"></i><span>Layers</span><i class="bi bi-chevron-down"></i></summary>
           <div class="map-control-popover">
             <strong>Map layers</strong>
-            <label class="map-layer-choice"><span>Basemap</span><select id="basemapSelect" class="form-select form-select-sm"><option value="labels">Standard with labels</option><option value="light">Light</option></select></label>
+            <label class="map-layer-choice"><span>Basemap</span><select id="basemapSelect" class="form-select form-select-sm"><option value="light" selected>Quiet canvas</option><option value="labels">Street map</option><option value="satellite">Satellite imagery</option></select></label>
             <label class="map-layer-toggle" title="Show or hide blue tower markers"><input type="checkbox" id="toggleTowers"><span>Cell towers</span></label>
             <label class="map-layer-toggle"><input type="checkbox" id="toggleWeather"><span>Rain radar <small>Live context</small></span></label>
           </div>
@@ -232,7 +234,33 @@
         <div class="whatif-disclaimer">Illustrative planning approximation based on documented scenario elasticity assumptions. Not a field-validated prediction of real operational impact.</div>
     </div>
     <div class="map-selected-bar d-none" id="mapSelectedBar"></div>
-    <div id="map"></div>
+    <div class="map-experience-toolbar">
+      <div class="map-style-switch" role="group" aria-label="Map presentation style">
+        <button type="button" data-map-style="2d" aria-pressed="true" class="active"><i class="bi bi-map" aria-hidden="true"></i> Clean 2D</button>
+        <button type="button" data-map-style="3d" aria-pressed="false"><i class="bi bi-buildings" aria-hidden="true"></i> 3D city</button>
+        <button type="button" data-map-style="heat" aria-pressed="false"><i class="bi bi-fire" aria-hidden="true"></i> Heatmap</button>
+      </div>
+      <button type="button" id="mapOverviewBtn" class="map-overview-btn" title="Return to the regional overview"><i class="bi bi-bounding-box" aria-hidden="true"></i> Overview</button>
+    </div>
+    <div class="map-environment-controls" id="mapEnvironmentControls" hidden>
+      <label><input type="checkbox" id="mapBuildingsEnabled" checked> 3D buildings</label>
+      <label><input type="checkbox" id="mapTerrainEnabled" checked> Terrain</label>
+      <label><input type="checkbox" id="mapColumnsEnabled"> Data columns</label>
+      <label class="map-column-opacity" id="mapColumnOpacityControl" hidden>Column opacity <input type="range" id="mapColumnOpacity" min="5" max="40" step="1" value="18" aria-label="Data column opacity"><output id="mapColumnOpacityValue" for="mapColumnOpacity">18%</output></label>
+      <button type="button" id="mapCityBtn"><i class="bi bi-buildings" aria-hidden="true"></i> KL skyline</button>
+    </div>
+    <div class="map-stage" id="mapStage" data-style="2d">
+      <div id="map"></div>
+      <div id="mapSpatial" hidden aria-label="Interactive network map"></div>
+      <div class="map-scene-label" aria-hidden="true"><span class="scene-eyebrow">KLANG VALLEY / NETWORK INTELLIGENCE</span><strong id="mapSceneTitle">Every area. A clearer picture.</strong></div>
+      <div class="map-camera-controls" id="mapCameraControls" hidden>
+        <button type="button" id="mapRotateBtn" aria-label="Rotate the map by 45 degrees" title="Rotate 45 degrees"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button>
+        <button type="button" id="mapTiltBtn" aria-label="Toggle steep or gentle map tilt" title="Change tilt"><i class="bi bi-layers" aria-hidden="true"></i></button>
+      </div>
+      <div class="map-scene-hint" id="mapSceneHint">Click an area to investigate · Scroll to zoom</div>
+    </div>
+    <div class="map-environment-status" id="mapEnvironmentStatus" hidden role="status" aria-live="polite"></div>
+    <div class="map-encoding-note" id="mapEncodingNote" role="status" aria-live="polite"></div>
     <div class="map-below-area">
       <div class="map-legend" id="mapLegend"></div>
       <div class="map-workspace-insight" id="mapWorkspaceInsight" aria-live="polite"></div>
@@ -524,5 +552,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="dashboard.js"></script>
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script src="map-experience.js"></script>
 </body>
 </html>

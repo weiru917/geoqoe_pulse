@@ -55,7 +55,7 @@ const state = {
   aiForecastExpanded: false,
   expandedRankedLists: new Map(),
   colorBy: "onset",
-  basemap: "labels",
+  basemap: "light",
   compareMode: false,
   compareCells: [],         // array of h3_index, max COMPARE_MAX
   tracking: {},             // h3_index -> "planned" | "done", persisted to localStorage
@@ -758,7 +758,16 @@ function buildMap() {
   state.tileLayers.light = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
     attribution: "Tiles &copy; Esri", maxZoom: 16,
   });
+  state.tileLayers.satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics", maxZoom: 18,
+  });
+  map.createPane("placeLabels");
+  map.getPane("placeLabels").style.zIndex = 450;
+  map.getPane("placeLabels").style.pointerEvents = "none";
+  state.tileLayers.lightLabels = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", { pane: "placeLabels", maxZoom: 16 });
+  state.tileLayers.satelliteLabels = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { pane: "placeLabels", maxZoom: 18 });
   state.tileLayers[state.basemap].addTo(map);
+  state.tileLayers[state.basemap + "Labels"]?.addTo(map);
 
   const geoLayer = L.geoJSON(state.grid, {
     style: () => ({ color: "#334155", weight: 0.5, fillOpacity: 0.75, fillColor: "#cbd5e1" }),
@@ -807,13 +816,17 @@ function buildMap() {
     if (state.activePopup === event.popup) state.activePopup = null;
   });
   state.towerLayer = towerLayer;
+  window.GeoQoEMap?.init();
 }
 
 function setBasemap(name) {
   if (!state.tileLayers[name] || name === state.basemap) return;
   state.map.removeLayer(state.tileLayers[state.basemap]);
+  if (state.tileLayers[state.basemap + "Labels"]) state.map.removeLayer(state.tileLayers[state.basemap + "Labels"]);
   state.tileLayers[name].addTo(state.map);
+  state.tileLayers[name + "Labels"]?.addTo(state.map);
   state.basemap = name;
+  window.GeoQoEMap?.basemap();
 }
 
 // ---------------------------------------------------------------------
@@ -1020,7 +1033,8 @@ function renderMapColors() {
     const hasSelection = Boolean(state.selectedH3) || state.compareCells.length > 0;
     const timeMachineResult = state.onset ? onsetValue("time_machine_result", c) : null;
     const filteredOut = state.colorBy === "onset" && state.finalsActualRevealed && state.timeMachineOutcomeFilter !== "all" && timeMachineResult !== state.timeMachineOutcomeFilter;
-    const style = { fillColor: colorForMode(state.colorBy, t, c), color: isSelected ? "#c4b5fd" : "#334155", weight: isSelected ? 3.4 : (state.map.getZoom() <= 11 ? 0.25 : 0.5), opacity: isSelected ? 1 : (filteredOut ? 0.12 : (state.map.getZoom() <= 11 ? 0.3 : 0.65)), dashArray: null, fillOpacity: filteredOut ? 0.08 : (hasSelection && !isSelected ? 0.34 : (isSelected ? 0.95 : (state.map.getZoom() <= 11 ? 0.55 : 0.7))) };
+    const muted = ["#e2e8f0", "#cbd5e1", "#dfe9e5", "#8aa3b5"].includes(colorForMode(state.colorBy, t, c));
+    const style = { fillColor: colorForMode(state.colorBy, t, c), color: isSelected ? "#6d28d9" : "#ffffff", weight: isSelected ? 3.4 : (state.map.getZoom() <= 11 ? 0.15 : 0.55), opacity: isSelected ? 1 : (filteredOut ? 0.08 : .45), dashArray: null, fillOpacity: filteredOut ? 0.06 : (hasSelection && !isSelected ? (muted ? .1 : .38) : (isSelected ? .88 : (muted ? .22 : .72))) };
     if (state.onset && state.colorBy === "static_ai" && onsetValue("static_data_status", c) === "ai_estimated") {
       // Dashed outline flags AI-ESTIMATED cells vs. solid outline for observed_ookla —
       // never let the color alone imply a real measurement where there isn't one.
@@ -1045,7 +1059,7 @@ function renderMapColors() {
       style.opacity = 0.18;
       style.fillOpacity = hasSelection && !isSelected ? 0.08 : 0.2;
     }
-    if (isSelected) Object.assign(style, { color: "#c4b5fd", weight: 3.4, opacity: 1, fillOpacity: 0.95 });
+    if (isSelected) Object.assign(style, { color: "#6d28d9", weight: 3.4, opacity: 1, fillOpacity: 0.9 });
     layer.setStyle(style);
     const path = layer.getElement();
     if (!path) return;
@@ -1063,6 +1077,7 @@ function renderMapColors() {
     if (state.colorBy === "onset" && state.quarterlyMapView !== "observed" && state.onset && (onsetValue("onset_risk_rank", c) ?? Infinity) <= 5) glowClass = "map-glow-violet";
     if (glowClass) path.classList.add(glowClass);
   });
+  window.GeoQoEMap?.render();
 }
 
 function renderLegend() {
@@ -1224,9 +1239,10 @@ function initLayerSearchPlacement() {
 function flyToCell(h3) {
   const props = state.gridPropsByH3.get(h3);
   if (!props) return;
-  state.map.flyTo([props.centroid_lat, props.centroid_lon], 14, { duration: 0.6 });
+  if (window.GeoQoEMap?.isSpatial()) window.GeoQoEMap.flyTo(h3);
+  else state.map.flyTo([props.centroid_lat, props.centroid_lon], 14, { duration: 0.6 });
   selectArea(h3);
-  playMapFlyRing(props);
+  if (!window.GeoQoEMap?.isSpatial()) playMapFlyRing(props);
 }
 
 function playMapFlyRing(props) {
