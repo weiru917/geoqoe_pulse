@@ -1,4 +1,15 @@
 /* Operator theme: visual tokens and components. Layout/data behavior stays in dashboard.js. */
+/* Reserve the final workspace before data loading and panel routing run. */
+body.dashboard-loading #mainWorkspace > :not(.workspace-tool-rail):not(.analysis-stage):not(.workspace-resize-handle):not(.main-col),
+body.dashboard-loading #mainWorkspace .main-col > :not(.map-panel),
+body.dashboard-loading .full-width-row { display:none!important; }
+body.dashboard-loading .workspace-resize-handle { display:none!important; }
+body.dashboard-loading #workspaceOverviewPanel > :not(.workspace-panel-title):not(.dashboard-load-status) { visibility:hidden; }
+body.dashboard-loading #workspaceOverviewPanel > .workspace-priority-title { visibility:hidden; }
+.dashboard-load-status { margin:18px 0; padding:14px; border:1px solid var(--op-border); border-radius:8px; color:var(--op-secondary); background:var(--op-subtle); font-size:13px; line-height:1.5; }
+.dashboard-load-error .dashboard-load-status { color:var(--op-danger); background:var(--op-danger-bg); }
+body.dashboard-loading .map-stage::after { content:"Loading network data…"; position:absolute; inset:0; z-index:600; display:grid; place-items:center; padding:24px; color:var(--op-muted); background:var(--op-subtle); font-size:13px; text-align:center; }
+body.dashboard-load-error .map-stage::after { content:"Network data unavailable"; }
 :root {
   color-scheme: light;
   --op-canvas:#f4f1f8; --op-surface:#ffffff; --op-subtle:#f8f6fb;

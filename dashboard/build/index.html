@@ -16,10 +16,10 @@
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css">
 <link rel="stylesheet" href="map-experience.css">
 </head>
-<body>
+<body class="app-page-command workspace-tool-overview quarterly-context dashboard-loading">
 
 <!-- ===================== HEADER ===================== -->
-<header class="app-header">
+<header class="app-header" inert>
   <div class="header-left">
     <div class="logo-mark" aria-hidden="true"><span></span><span></span><span></span></div>
     <div>
@@ -102,9 +102,9 @@
   </div>
 </section>
 
-<div class="main-grid command-mode" id="mainWorkspace">
+<div class="main-grid command-mode" id="mainWorkspace" aria-busy="true">
 
- <aside class="workspace-tool-rail" role="navigation" aria-label="Quarterly decision workflow">
+ <aside class="workspace-tool-rail" role="navigation" aria-label="Quarterly decision workflow" inert>
   <button class="workspace-tool active" data-workspace-tool="overview" onclick="setWorkspaceTool('overview')"><span><i class="bi bi-grid-1x2"></i></span><b>Reveal</b></button>
   <button class="workspace-tool ai-tool" data-workspace-tool="ai" onclick="setWorkspaceTool('ai')"><span><i class="bi bi-cpu"></i></span><b>Anticipate</b></button>
   <button class="workspace-tool" data-workspace-tool="explain" onclick="setWorkspaceTool('explain')"><span><i class="bi bi-diagram-3"></i></span><b>Explain</b></button>
@@ -123,8 +123,10 @@
  </section>
  <section class="panel workspace-analysis-panel" id="hourlyPulsePanel"></section>
 
- <section class="panel workspace-overview-panel" id="workspaceOverviewPanel" style="display:block !important">
+ <section class="analysis-stage" id="analysisStage" aria-live="polite">
+ <section class="panel workspace-overview-panel workspace-analysis-panel" id="workspaceOverviewPanel" style="display:block !important">
   <div class="workspace-panel-title"><span>Quarterly status</span><span class="cheat-badge real">REAL QUARTERLY DATA</span></div>
+  <p class="dashboard-load-status" id="dashboardLoadStatus" role="status">Loading network data. The map and quarterly status will appear here.</p>
   <p class="panel-hint">Underperforming = bottom 25% of measured Klang Valley download performance in that quarter; a relative benchmark, not a regulatory QoS threshold.</p><div class="workspace-overview-story"><span>Observed issues · 2026Q1</span><i class="bi bi-arrow-right"></i><span>AI forecast · 2026Q2</span><i class="bi bi-arrow-right"></i><span>Top priority location</span></div>
   <div class="workspace-overview-grid" id="workspaceOverviewGrid"></div>
   <div class="workspace-panel-title workspace-priority-title">Top priority location</div>
@@ -141,6 +143,7 @@
   </div>
   <div id="workspaceSelectedCell" class="workspace-selected-cell"></div>
  </section>
+ </section>
 
  <section class="panel workspace-more-panel" id="workspaceMorePanel">
   <div class="workspace-panel-title">More tools</div>
@@ -151,13 +154,12 @@
   </div>
  </section>
 
- <section class="analysis-stage" id="analysisStage" aria-live="polite"></section>
  <div class="workspace-resize-handle" id="workspaceResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize analysis and map panels" tabindex="0"><span></span></div>
 
  <div class="main-col main-col-left">
 
   <!-- ===================== MAP PANEL ===================== -->
-  <section class="panel map-panel" id="mapPanel">
+  <section class="panel map-panel" id="mapPanel" inert>
     <div class="map-ambient" aria-hidden="true">
       <span class="ambient-glow glow-one"></span><span class="ambient-glow glow-two"></span>
       <span class="ambient-dot dot-one"></span><span class="ambient-dot dot-two"></span><span class="ambient-dot dot-three"></span><span class="ambient-dot dot-four"></span>
